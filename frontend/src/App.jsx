@@ -5,7 +5,7 @@ import Admin from './Admin.jsx'
 const tg = window.Telegram?.WebApp
 const AUTH = tg?.initData ? `tma ${tg.initData}` : `dev ${new URLSearchParams(location.search).get('dev') || '1'}`
 const birr = (s) => (s / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const BRAND = 'Bingo' // change the app name shown on the first page here
+const BRAND = 'Big Bingo' // change the app name shown on the first page here
 const letterOf = (n) => 'BINGO'[Math.floor((n - 1) / 15)]
 const LETTER_BG = ['bg-[#3b82f6]', 'bg-[#6366f1]', 'bg-[#a855f7]', 'bg-[#10b981]', 'bg-[#f97316]']
 const ballBg = (n) => LETTER_BG[Math.floor((n - 1) / 15)]
@@ -42,7 +42,7 @@ const DICT = {
     copy: 'ኮፒ', copied: 'ተቀድቷል', shareBtn: 'አጋራ', shareText: 'ከእኔ ጋር Bingo ይጫወቱ! ሲመዘገቡ 10 ብር ያገኛሉ።',
     connecting: 'ከጨዋታው ጋር በመገናኘት ላይ…', reconnecting: 'እንደገና በመገናኘት ላይ…', loading: 'በመጫን ላይ…',
     voiceOn: '🔊 ድምፅ', voiceOff: '🔇 ድምፅ',
-    welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10',
+    tagline: 'ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!', welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10',
     players: 'ተጫዋቾች', gameId: 'የጨዋታ ቁጥር', bet: 'ውርርድ', derash: 'ደራሽ', stake: 'ዋጋ',
     back: 'ተመለስ', refresh: 'አድስ', leave: 'ውጣ', auto: 'አውቶማቲክ',
     lobbyRound: 'አሁን ያለው ዙር', lobbyPlayers: 'የተመዘገቡ ተጫዋቾች', lobbyPrize: 'አሁን ያለው ደራሽ',
@@ -80,7 +80,7 @@ const DICT = {
     copy: 'Copy', copied: 'Copied', shareBtn: 'Share', shareText: 'Play Bingo with me! You get 10 birr when you join.',
     connecting: 'Connecting to the game…', reconnecting: 'Reconnecting…', loading: 'Loading…',
     voiceOn: '🔊 Voice', voiceOff: '🔇 Voice',
-    welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10',
+    tagline: 'Pick your numbers. Shout BINGO. Win.', welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10',
     players: 'Players', gameId: 'Game ID', bet: 'Bet', derash: 'Derash', stake: 'Stake',
     back: 'Back', refresh: 'Refresh', leave: 'Leave', auto: 'Automatic',
     lobbyRound: 'Current round', lobbyPlayers: 'Players this round', lobbyPrize: 'Current prize',
@@ -206,33 +206,36 @@ function Rules({ g }) {
 function Lobby({ g, onPlay }) {
   const { t } = useL()
   const [rules, setRules] = useState(false)
+  const balls = [...'BINGO']
   return (
-    <>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="grid size-12 place-items-center rounded-full bg-white text-2xl font-bold text-purple-700">{BRAND[0]}</span>
-          <h1 className="text-2xl font-bold">{BRAND}</h1>
-        </div>
-        <button onClick={() => setRules((r) => !r)} aria-expanded={rules} className="glass rounded-xl px-4 py-2 font-semibold">
-          ? {t('rules')}
-        </button>
+    <div className="flex min-h-[80dvh] flex-col items-center justify-center text-center">
+      <div className="flex gap-2" aria-hidden>
+        {balls.map((l, i) => (
+          <span key={l} className={`grid size-12 place-items-center rounded-full text-xl font-extrabold shadow-lg ring-2 ring-white/70 ${LETTER_BG[i]}`} style={{ transform: `translateY(${i % 2 ? 8 : -8}px)` }}>{l}</span>
+        ))}
       </div>
-      {rules && g && <Rules g={g} />}
-      <h2 className="mt-14 text-center text-4xl font-bold leading-tight">
-        {t('welcomeTo')} <span className="bg-gradient-to-r from-yellow-300 to-orange-500 bg-clip-text text-transparent">{BRAND}</span>
-      </h2>
-      <section className="glass mt-10 rounded-3xl border-2 border-saffron/50 p-5">
-        <h3 className="text-center font-semibold">▷ {t('chooseStake')}</h3>
-        <button onClick={onPlay} className="mt-8 w-full rounded-2xl bg-gradient-to-r from-[#00d08a] to-[#00998a] py-4 text-xl font-bold shadow-lg">
-          ▷ {t('play10')}
-        </button>
-      </section>
-      <section className="glass mt-8 grid grid-cols-3 gap-2 rounded-3xl p-5 text-center">
-        <div><p className="text-2xl font-bold tabular-nums">{g ? g.round : '—'}</p><p className="text-xs text-white/70">{t('lobbyRound')}</p></div>
-        <div><p className="text-2xl font-bold tabular-nums">{g ? g.taken.length : '—'}</p><p className="text-xs text-white/70">{t('lobbyPlayers')}</p></div>
-        <div><p className="text-2xl font-bold tabular-nums">{g ? birr(g.prize) : '—'}</p><p className="text-xs text-white/70">{t('lobbyPrize')}</p></div>
-      </section>
-    </>
+      <h1 className="mt-10 text-5xl font-extrabold uppercase tracking-wide">
+        <span className="text-white">Big</span> <span className="text-saffron">Bingo</span>
+      </h1>
+      <p className="mt-2 text-sm text-white/70">{t('tagline')}</p>
+
+      <div className="mt-8 w-full rounded-[2rem] bg-saffron p-5 text-ink shadow-xl">
+        <p className="text-sm font-semibold uppercase tracking-widest">{t('lobbyPrize')}</p>
+        <p className="text-5xl font-extrabold tabular-nums">{g ? birr(g.prize) : '—'} <span className="text-xl">{t('birr')}</span></p>
+      </div>
+
+      <button onClick={onPlay} className="mt-5 w-full rounded-full border-4 border-white/80 bg-called py-5 text-2xl font-extrabold shadow-xl active:scale-95">
+        {t('play10')}
+      </button>
+
+      <div className="mt-6 flex w-full justify-center gap-3 text-sm">
+        <span className="rounded-full bg-white/10 px-4 py-2">{t('round')} <b className="tabular-nums">{g ? g.round : '—'}</b></span>
+        <span className="rounded-full bg-white/10 px-4 py-2">{t('players')} <b className="tabular-nums">{g ? g.taken.length : '—'}</b></span>
+      </div>
+
+      <button onClick={() => setRules((r) => !r)} aria-expanded={rules} className="mt-6 text-sm text-white/70 underline underline-offset-4">{t('rules')}</button>
+      {rules && g && <div className="w-full text-left"><Rules g={g} /></div>}
+    </div>
   )
 }
 

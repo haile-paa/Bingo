@@ -27,7 +27,7 @@ const (
 	referralBonus int64 = 1000
 	prizeFull     int64 = 500000 // 5000 birr when every cartela is sold
 	totalSpots          = 600
-	minSpots            = 30 // fewest cartelas needed to start a round
+	minSpots            = 2  // fewest cartelas needed to start a round (testing; set back to 30 for production)
 	maxPerUser          = 2  // cartelas one person can hold per round
 )
 
