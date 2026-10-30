@@ -82,6 +82,45 @@ func menuKB() gin.H {
 
 func sendMenu(uid int64, text string) { sendText(uid, text, menuKB()) }
 
+// playKB is the "Play" button that opens the mini app.
+func playKB() gin.H {
+	return gin.H{"inline_keyboard": [][]gin.H{
+		{{"text": "🎮 ተጫወት (Play 10)", "web_app": gin.H{"url": cfg.MiniAppURL}}},
+	}}
+}
+
+// setupBotMenu registers the "Menu" command list (the button left of the message box)
+// and makes that button show the commands. Runs once at startup.
+func setupBotMenu() {
+	tg("setMyCommands", gin.H{"commands": []gin.H{
+		{"command": "start", "description": "Start"},
+		{"command": "register", "description": "Register"},
+		{"command": "play", "description": "Play"},
+		{"command": "deposit", "description": "Deposit"},
+		{"command": "balance", "description": "Balance"},
+		{"command": "withdraw", "description": "Withdraw"},
+		{"command": "invite", "description": "Invite"},
+		{"command": "support", "description": "Support"},
+		{"command": "help", "description": "Instructions"},
+	}})
+	tg("setChatMenuButton", gin.H{"menu_button": gin.H{"type": "commands"}})
+}
+
+// commandActions maps a slash command to the same action the inline buttons use.
+var commandActions = map[string]string{
+	"/register": "reg", "/play": "play", "/deposit": "dep", "/balance": "bal",
+	"/withdraw": "wd", "/invite": "inv", "/support": "sup", "/help": "ins",
+}
+
+// commandOf returns the lower-case command of a message ("/Play@mybot now" -> "/play").
+func commandOf(text string) string {
+	f := strings.Fields(text)
+	if len(f) == 0 || !strings.HasPrefix(f[0], "/") {
+		return ""
+	}
+	return strings.ToLower(strings.SplitN(f[0], "@", 2)[0])
+}
+
 func loadUser(ctx context.Context, uid int64) (User, error) {
 	var u User
 	err := db.Collection("users").FindOne(ctx, bson.M{"_id": uid}).Decode(&u)
@@ -200,8 +239,13 @@ func onMessage(ctx context.Context, m *Message) {
 		onContact(ctx, m)
 		return
 	}
-	if strings.HasPrefix(text, "/start") {
+	cmd := commandOf(text)
+	if cmd == "/start" {
 		onStart(ctx, m.From, text)
+		return
+	}
+	if action, ok := commandActions[cmd]; ok {
+		runAction(ctx, m.From, action)
 		return
 	}
 	u, err := loadUser(ctx, uid)
@@ -248,6 +292,11 @@ func onMessage(ctx context.Context, m *Message) {
 
 func onCallback(ctx context.Context, id string, from tgUser, data string) {
 	tg("answerCallbackQuery", gin.H{"callback_query_id": id})
+	runAction(ctx, from, data)
+}
+
+// runAction runs a menu action; used by both the inline buttons and the slash commands.
+func runAction(ctx context.Context, from tgUser, data string) {
 	uid := from.ID
 	if _, err := ensureUser(ctx, uid, from.FirstName, 0); err != nil {
 		log.Println("callback:", err)
@@ -267,6 +316,8 @@ func onCallback(ctx context.Context, id string, from tgUser, data string) {
 	switch data {
 	case "reg":
 		askContact(uid, u)
+	case "play":
+		sendText(uid, "🎮 ለመጫወት ከታች ያለውን ይጫኑ፦", playKB())
 	case "bal":
 		sendMenu(uid, "💼 የአካውንት መረጃ\n\nስም፦ "+u.Name+"\nስልክ፦ "+u.Phone+"\nዋና ዋሌት፦ "+birr(u.Balance)+" ብር\nየጨዋታ ዋሌት፦ "+birr(u.Bonus)+" ብር")
 	case "dep":

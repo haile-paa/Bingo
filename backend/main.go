@@ -143,6 +143,7 @@ func main() {
 
 	game = newGame()
 	go game.run()
+	go setupBotMenu()
 
 	r := gin.Default()
 	r.GET("/ws", wsHandler)

@@ -5,6 +5,7 @@ import Admin from './Admin.jsx'
 const tg = window.Telegram?.WebApp
 const AUTH = tg?.initData ? `tma ${tg.initData}` : `dev ${new URLSearchParams(location.search).get('dev') || '1'}`
 const birr = (s) => (s / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const BRAND = 'Bingo' // change the app name shown on the first page here
 const letterOf = (n) => 'BINGO'[Math.floor((n - 1) / 15)]
 const LETTER_BG = ['bg-[#3b82f6]', 'bg-[#6366f1]', 'bg-[#a855f7]', 'bg-[#10b981]', 'bg-[#f97316]']
 const ballBg = (n) => LETTER_BG[Math.floor((n - 1) / 15)]
@@ -23,8 +24,8 @@ const DICT = {
     noWinner: 'አሸናፊ የለም', refunded: 'ክፍያዎ ወደ ዋሌትዎ ተመልሷል።', nextIn: 'ቀጣይ ጨዋታ በ{n} ሰከንድ ይጀምራል',
     rules: 'ደንቦች',
     r1: 'ካርቴላ ለመምረጥ {pick} ሰከንድ አለዎት። እያንዳንዱ ካርቴላ {fee} ብር ነው።',
-    r2: 'ከዚያ በ{run} ሰከንድ ውስጥ ቁጥሮች ይጠራሉ። የተጠራ ቁጥር በካርቴላዎ ላይ አረንጓዴ ይሆናል።',
-    r3: 'መስመር (አግድም፣ ቁልቁል ወይም ሰያፍ) የሞላ የመጀመሪያው ካርቴላ ያሸንፋል።',
+    r2: 'ከዚያ ወደ ጨዋታው ይገባሉ፤ ቁጥሮች አንድ በአንድ ይጠራሉ። የተጠራ ቁጥር በካርቴላዎ ላይ አረንጓዴ ይሆናል።',
+    r3: 'መስመር (አግድም፣ ቁልቁል ወይም ሰያፍ) የሞላ የመጀመሪያው ካርቴላ ያሸንፋል፤ አሸናፊ ሲገኝ ቁጥር መጥራት ይቆማል።',
     r4: '{total} ካርቴላ ሙሉ ሲሸጥ ሽልማቱ {full} ብር ነው። ባነሰ ካርቴላ ሽልማቱ በተመጣጣኝ ይሰላል።',
     r5: 'ሁለት ካርቴላ በአንድ ጊዜ ቢያሸንፉ ሽልማቱ እኩል ይካፈላል። ማንም ካላሸነፈ ክፍያ ይመለሳል።',
     err_closed: 'መምረጫ ጊዜው አልፏል። ቀጣዩን ዙር ይጠብቁ።', err_taken: 'ይህ ካርቴላ ተይዟል።',
@@ -41,6 +42,10 @@ const DICT = {
     copy: 'ኮፒ', copied: 'ተቀድቷል', shareBtn: 'አጋራ', shareText: 'ከእኔ ጋር Bingo ይጫወቱ! ሲመዘገቡ 10 ብር ያገኛሉ።',
     connecting: 'ከጨዋታው ጋር በመገናኘት ላይ…', reconnecting: 'እንደገና በመገናኘት ላይ…', loading: 'በመጫን ላይ…',
     voiceOn: '🔊 ድምፅ', voiceOff: '🔇 ድምፅ',
+    welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10',
+    players: 'ተጫዋቾች', gameId: 'የጨዋታ ቁጥር', bet: 'ውርርድ', derash: 'ደራሽ', stake: 'ዋጋ',
+    back: 'ተመለስ', refresh: 'አድስ', leave: 'ውጣ', auto: 'አውቶማቲክ',
+    lobbyRound: 'አሁን ያለው ዙር', lobbyPlayers: 'የተመዘገቡ ተጫዋቾች', lobbyPrize: 'አሁን ያለው ደራሽ',
     k_signup_bonus: 'የምዝገባ ስጦታ', k_deposit: 'ገቢ', k_referral: 'የግብዣ ሽልማት', k_entry: 'የካርቴላ ክፍያ',
     k_win: 'ሽልማት', k_withdraw: 'ወጪ', k_refund: 'ተመላሽ',
   },
@@ -57,8 +62,8 @@ const DICT = {
     noWinner: 'No winner', refunded: 'Your payment was returned to your wallet.', nextIn: 'Next game starts in {n}s',
     rules: 'Rules',
     r1: 'You have {pick} seconds to pick cartelas. Each costs {fee} birr.',
-    r2: 'Then numbers are called for {run} seconds. Called numbers turn green on your cartela.',
-    r3: 'The first cartela to complete a line (row, column or diagonal) wins.',
+    r2: 'Then the game starts and numbers are called one by one. Called numbers turn green on your cartela.',
+    r3: 'The first cartela to complete a line (row, column or diagonal) wins. Calling stops as soon as there is a winner.',
     r4: 'With all {total} cartelas sold the prize is {full} birr. With fewer, it scales down proportionally.',
     r5: 'If several cartelas win together the prize is split equally. If nobody wins, stakes are refunded.',
     err_closed: 'Picking is closed. Wait for the next round.', err_taken: 'That cartela is taken.',
@@ -75,6 +80,10 @@ const DICT = {
     copy: 'Copy', copied: 'Copied', shareBtn: 'Share', shareText: 'Play Bingo with me! You get 10 birr when you join.',
     connecting: 'Connecting to the game…', reconnecting: 'Reconnecting…', loading: 'Loading…',
     voiceOn: '🔊 Voice', voiceOff: '🔇 Voice',
+    welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10',
+    players: 'Players', gameId: 'Game ID', bet: 'Bet', derash: 'Derash', stake: 'Stake',
+    back: 'Back', refresh: 'Refresh', leave: 'Leave', auto: 'Automatic',
+    lobbyRound: 'Current round', lobbyPlayers: 'Players this round', lobbyPrize: 'Current prize',
     k_signup_bonus: 'Welcome bonus', k_deposit: 'Deposit', k_referral: 'Invite reward', k_entry: 'Cartela payment',
     k_win: 'Prize won', k_withdraw: 'Withdrawal', k_refund: 'Refund',
   },
@@ -155,28 +164,23 @@ function useGame(voiceOn) {
   }, [])
 
   const toggle = useCallback((n) => ws.current?.send(JSON.stringify({ type: 'toggle', n })), [])
-  return { g, conn, err, toggle }
+  // closing the socket makes it reconnect by itself and the server sends a fresh full state
+  const reconnect = useCallback(() => ws.current?.close(), [])
+  return { g, conn, err, toggle, reconnect }
 }
 
-const Stat = ({ label, value, hi }) => (
-  <div className={`rounded-2xl p-2 text-center ${hi ? 'bg-saffron text-ink' : 'bg-panel'}`}>
-    <p className={`text-[11px] ${hi ? 'text-ink/70' : 'text-white/60'}`}>{label}</p>
-    <p className="text-base font-bold tabular-nums">{value}</p>
-  </div>
-)
-
-function Cartela({ n, card, called, bg = 'bg-panel' }) {
+function Cartela({ n, card, called, bg = 'bg-panel', compact = false }) {
   const set = new Set(called)
   const last = called[called.length - 1]
   return (
-    <figure className={`mt-3 rounded-3xl p-3 ${bg}`}>
+    <figure className={`${compact ? 'mt-2 rounded-2xl p-2' : 'mt-3 rounded-3xl p-3'} ${bg}`}>
       <figcaption className="mb-2 text-sm font-semibold text-saffron">#{n}</figcaption>
-      <div className="grid grid-cols-5 gap-1.5 text-center">
+      <div className={`grid grid-cols-5 text-center ${compact ? 'gap-1' : 'gap-1.5'}`}>
         {[...'BINGO'].map((l, i) => <span key={l} className={`rounded-lg py-1 text-sm font-bold ${LETTER_BG[i]}`}>{l}</span>)}
         {card.flat().map((v, i) => (
           <span
             key={i}
-            className={`grid h-10 place-items-center rounded-lg text-lg font-bold tabular-nums ${v === 0 || set.has(v) ? 'bg-called text-white' : 'bg-white text-ink'} ${v === last ? 'ring-2 ring-saffron' : ''}`}
+            className={`grid place-items-center rounded-lg font-bold tabular-nums ${compact ? 'h-8 text-sm' : 'h-10 text-lg'} ${v === 0 || set.has(v) ? 'bg-called text-white' : 'bg-white text-ink'} ${v === last ? 'ring-2 ring-saffron' : ''}`}
           >
             {v === 0 ? '★' : v}
           </span>
@@ -186,36 +190,61 @@ function Cartela({ n, card, called, bg = 'bg-panel' }) {
   )
 }
 
-function Master({ called }) {
-  const set = new Set(called)
+function Rules({ g }) {
+  const { t } = useL()
+  const v = { pick: g.cfg.pick, fee: birr(g.fee), total: g.total, full: birr(g.cfg.full) }
   return (
-    <section aria-label="1-75" className="mt-4 rounded-3xl bg-panel p-3">
-      {[0, 1, 2, 3, 4].map((row) => (
-        <div key={row} className="flex items-center gap-[2px] py-[1px]">
-          <span className={`grid size-5 place-items-center rounded text-xs font-bold ${LETTER_BG[row]}`}>{'BINGO'[row]}</span>
-          {Array.from({ length: 15 }, (_, i) => row * 15 + i + 1).map((n) => (
-            <span key={n} className={`grid h-6 flex-1 place-items-center rounded text-[10px] tabular-nums ${set.has(n) ? 'bg-saffron font-bold text-ink' : 'text-white/40'}`}>{n}</span>
-          ))}
-        </div>
-      ))}
+    <section className="glass mt-4 rounded-3xl p-4">
+      <ol className="list-decimal space-y-2 pl-5 text-sm text-white/80">
+        {['r1', 'r2', 'r3', 'r4', 'r5'].map((k) => <li key={k}>{t(k, v)}</li>)}
+      </ol>
     </section>
   )
 }
 
-function Rules({ g }) {
+// ---------- page 1: only "Play 10" ----------
+function Lobby({ g, onPlay }) {
   const { t } = useL()
-  const v = { pick: g.cfg.pick, run: g.cfg.run, fee: birr(g.fee), total: g.total, full: birr(g.cfg.full) }
+  const [rules, setRules] = useState(false)
   return (
-    <details className="mt-5 rounded-3xl bg-panel p-4">
-      <summary className="cursor-pointer font-semibold">{t('rules')}</summary>
-      <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-white/80">
-        {['r1', 'r2', 'r3', 'r4', 'r5'].map((k) => <li key={k}>{t(k, v)}</li>)}
-      </ol>
-    </details>
+    <>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="grid size-12 place-items-center rounded-full bg-white text-2xl font-bold text-purple-700">{BRAND[0]}</span>
+          <h1 className="text-2xl font-bold">{BRAND}</h1>
+        </div>
+        <button onClick={() => setRules((r) => !r)} aria-expanded={rules} className="glass rounded-xl px-4 py-2 font-semibold">
+          ? {t('rules')}
+        </button>
+      </div>
+      {rules && g && <Rules g={g} />}
+      <h2 className="mt-14 text-center text-4xl font-bold leading-tight">
+        {t('welcomeTo')} <span className="bg-gradient-to-r from-yellow-300 to-orange-500 bg-clip-text text-transparent">{BRAND}</span>
+      </h2>
+      <section className="glass mt-10 rounded-3xl border-2 border-saffron/50 p-5">
+        <h3 className="text-center font-semibold">▷ {t('chooseStake')}</h3>
+        <button onClick={onPlay} className="mt-8 w-full rounded-2xl bg-gradient-to-r from-[#00d08a] to-[#00998a] py-4 text-xl font-bold shadow-lg">
+          ▷ {t('play10')}
+        </button>
+      </section>
+      <section className="glass mt-8 grid grid-cols-3 gap-2 rounded-3xl p-5 text-center">
+        <div><p className="text-2xl font-bold tabular-nums">{g ? g.round : '—'}</p><p className="text-xs text-white/70">{t('lobbyRound')}</p></div>
+        <div><p className="text-2xl font-bold tabular-nums">{g ? g.taken.length : '—'}</p><p className="text-xs text-white/70">{t('lobbyPlayers')}</p></div>
+        <div><p className="text-2xl font-bold tabular-nums">{g ? birr(g.prize) : '—'}</p><p className="text-xs text-white/70">{t('lobbyPrize')}</p></div>
+      </section>
+    </>
   )
 }
 
-function Pick({ g, toggle, now }) {
+const Pill = ({ label, value, hi }) => (
+  <div className={`glass min-w-0 flex-1 rounded-xl px-2 py-1 ${hi ? 'text-center' : ''}`}>
+    <p className="truncate text-[11px] font-semibold text-purple-200">{label}</p>
+    <p className={`truncate font-bold tabular-nums ${hi ? 'text-xl text-yellow-300' : 'text-sm'}`}>{value}</p>
+  </div>
+)
+
+// ---------- page 2: only the 600 numbers (no cartela here) ----------
+function Pick({ g, me, toggle, now, onBack, onRefresh }) {
   const { t } = useL()
   const left = Math.max(0, Math.ceil((g.deadline - now) / 1000))
   const grid = useMemo(() => {
@@ -230,7 +259,7 @@ function Pick({ g, toggle, now }) {
           onClick={() => toggle(n)}
           disabled={other}
           aria-pressed={isMine}
-          className={`h-10 rounded-lg text-sm font-bold tabular-nums ${isMine ? 'bg-called text-white' : other ? 'bg-rose text-white/90' : 'bg-ink text-white'}`}
+          className={`h-10 rounded-lg border text-sm font-bold tabular-nums ${isMine ? 'border-called bg-called text-white' : other ? 'border-orange-500 bg-orange-600 text-white' : 'border-white/25 bg-white/10 text-white'}`}
         >
           {n}
         </button>
@@ -240,65 +269,92 @@ function Pick({ g, toggle, now }) {
 
   return (
     <>
-      <section className="grid grid-cols-4 gap-2">
-        <Stat label={t('round')} value={g.round} />
-        <Stat label={t('time')} value={`${left}s`} hi />
-        <Stat label={t('price')} value={birr(g.fee)} />
-        <Stat label={t('mineCount')} value={`${g.mine.length}/${g.cfg.max}`} />
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={onBack} className="glass rounded-xl px-4 py-2 font-semibold">← {t('back')}</button>
+        <button onClick={onRefresh} className="glass rounded-xl px-4 py-2 font-semibold">↻ {t('refresh')}</button>
+      </div>
+      <section className="mt-3 flex gap-2">
+        <Pill label={t('main')} value={me ? birr(me.balance) : '—'} />
+        <Pill label={t('bonus')} value={me ? birr(me.bonus) : '—'} />
+        <Pill label={t('stake')} value={birr(g.fee)} />
+        <Pill label={`${g.mine.length}/${g.cfg.max}`} value={`${left} s`} hi />
       </section>
       {g.taken.length < g.cfg.min && (
-        <p className="mt-3 rounded-xl bg-line px-3 py-2 text-sm">{t('need', { min: g.cfg.min, n: g.taken.length })}</p>
+        <p className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-sm">{t('need', { min: g.cfg.min, n: g.taken.length })}</p>
       )}
       <p className="mt-3 text-sm text-white/70">{t('pickHint', { fee: birr(g.fee) })}</p>
-      <div className="mt-3 max-h-[42dvh] overflow-y-auto rounded-3xl bg-panel p-3">
+      <div className="glass mt-3 max-h-[68dvh] overflow-y-auto rounded-2xl p-2">
         <div className="grid grid-cols-8 gap-1.5">{grid}</div>
       </div>
       <p className="mt-2 flex items-center gap-2 text-xs text-white/70">
         <i className="inline-block size-3 rounded bg-called" /> {t('legendMine')}
-        <i className="ml-3 inline-block size-3 rounded bg-rose" /> {t('legendTaken')}
+        <i className="ml-3 inline-block size-3 rounded bg-orange-600" /> {t('legendTaken')}
       </p>
-      <h2 className="mt-5 font-semibold">{t('myCards')}</h2>
-      {g.mine.length === 0 && <p className="mt-2 text-sm text-white/60">{t('noCards')}</p>}
-      {g.mine.map((n) => <Cartela key={n} n={n} card={g.cards[n]} called={[]} />)}
-      <Rules g={g} />
     </>
   )
 }
 
-function Run({ g }) {
+// ---------- page 3: the bingo section (opens by itself when the 30 s are over) ----------
+function Bingo({ g, voice, toggleVoice, onLeave, onRefresh }) {
   const { t } = useL()
+  const set = new Set(g.called)
   const last = g.called[g.called.length - 1]
-  const max = g.cfg.run / g.cfg.call
+  const rows = Array.from({ length: 15 }, (_, r) => r)
   return (
     <>
-      <section className="grid grid-cols-4 gap-2">
-        <Stat label={t('round')} value={g.round} />
-        <Stat label={t('cartelas')} value={g.taken.length} />
-        <Stat label={t('prize')} value={birr(g.prize)} />
-        <Stat label={t('called')} value={`${g.called.length}/${max}`} hi />
+      <section className="flex gap-1.5">
+        <Pill label={t('gameId')} value={g.gid} />
+        <Pill label={t('players')} value={g.taken.length} />
+        <Pill label={t('bet')} value={birr(g.fee)} />
+        <Pill label={t('derash')} value={birr(g.prize)} />
+        <Pill label={t('called')} value={g.called.length} />
       </section>
-      <section className="mt-4 rounded-3xl bg-panel p-5 text-center">
-        {last ? (
-          <div className={`mx-auto grid size-36 place-items-center rounded-full ring-8 ring-saffron/80 ${ballBg(last)}`}>
-            <p className="text-5xl font-bold tabular-nums">{letterOf(last)}-{last}</p>
+      <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-2">
+        <section aria-label="1-75" className="glass rounded-2xl p-2">
+          <div className="grid grid-cols-5 gap-1 text-center">
+            {[...'BINGO'].map((l, i) => <span key={l} className={`rounded-md py-1 text-xs font-bold ${LETTER_BG[i]}`}>{l}</span>)}
+            {rows.flatMap((r) => [0, 1, 2, 3, 4].map((c) => {
+              const n = c * 15 + r + 1
+              return (
+                <span key={n} className={`grid h-8 place-items-center rounded-md text-xs font-bold tabular-nums ${n === last ? 'bg-saffron text-ink' : set.has(n) ? 'bg-called text-white' : 'bg-white/10 text-white/80'}`}>{n}</span>
+              )
+            }))}
           </div>
-        ) : (
-          <p className="py-10 text-xl font-bold">{t('ready')}</p>
-        )}
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {g.called.slice(-6, -1).reverse().map((n) => (
-            <span key={n} className={`rounded-full px-3 py-1 text-sm font-bold tabular-nums ${ballBg(n)}`}>{letterOf(n)}-{n}</span>
-          ))}
-        </div>
-      </section>
-      {g.mine.length === 0 && (
-        <section className="mt-4 rounded-3xl bg-panel p-4 text-center">
-          <p className="text-lg font-bold">{t('watching')}</p>
-          <p className="mt-1 text-sm text-white/70">{t('watchingMsg')}</p>
         </section>
-      )}
-      {g.mine.map((n) => <Cartela key={n} n={n} card={g.cards[n]} called={g.called} />)}
-      <Master called={g.called} />
+        <div className="min-w-0">
+          <section className="glass flex items-center justify-between rounded-xl p-2">
+            {last ? <span className={`rounded-full px-3 py-1 text-sm font-bold tabular-nums ${ballBg(last)}`}>{letterOf(last)}-{last}</span> : <span />}
+            <button onClick={toggleVoice} aria-pressed={voice} aria-label={voice ? t('voiceOn') : t('voiceOff')} className="px-2 text-lg">{voice ? '🔊' : '🔇'}</button>
+          </section>
+          <section className="glass mt-2 grid place-items-center rounded-xl py-4">
+            {last ? (
+              <div className={`grid size-24 place-items-center rounded-full ring-4 ring-saffron ${ballBg(last)}`}>
+                <p className="text-2xl font-bold tabular-nums">{letterOf(last)}-{last}</p>
+              </div>
+            ) : (
+              <p className="py-6 text-lg font-bold">{t('ready')}</p>
+            )}
+          </section>
+          <section className="glass mt-2 flex items-center justify-between rounded-full px-3 py-1.5 text-sm">
+            <span>{t('auto')}</span>
+            <span aria-hidden className="relative h-5 w-9 rounded-full bg-called"><i className="absolute right-0.5 top-0.5 size-4 rounded-full bg-white" /></span>
+          </section>
+          <section className="glass mt-2 rounded-xl p-2">
+            {g.mine.length === 0 ? (
+              <>
+                <p className="mt-2 text-center text-lg font-bold">{t('watching')}</p>
+                <p className="my-3 text-center text-sm text-white/80">{t('watchingMsg')}</p>
+              </>
+            ) : (
+              g.mine.map((n) => <Cartela key={n} n={n} card={g.cards[n]} called={g.called} bg="bg-black/20" compact />)
+            )}
+          </section>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <button onClick={onLeave} className="rounded-2xl bg-gradient-to-r from-rose to-orange-600 py-3 font-bold">{t('leave')}</button>
+        <button onClick={onRefresh} className="glass rounded-2xl py-3 font-bold">↻ {t('refresh')}</button>
+      </div>
     </>
   )
 }
@@ -462,10 +518,11 @@ function Profile({ me }) {
 function Player() {
   const { t } = useL()
   const [tab, setTab] = useState('game')
+  const [view, setView] = useState('lobby') // lobby (Play 10) -> play (numbers, then bingo, then winner)
   const [voice, setVoice] = useState(false)
   const [me, setMe] = useState(null)
   const now = useNow()
-  const { g, conn, err, toggle } = useGame(voice)
+  const { g, conn, err, toggle, reconnect } = useGame(voice)
   const refresh = useCallback(() => api('/api/me').then(setMe).catch(() => {}), [])
 
   useEffect(() => {
@@ -481,38 +538,27 @@ function Player() {
     setVoice(next)
     if (next && 'speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance('Voice on'))
   }
+  const toLobby = () => setView('lobby')
+  const reload = () => {
+    reconnect()
+    refresh()
+  }
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col">
-      <header className="sticky top-0 z-10 bg-ink px-4 pb-3 pt-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Bingo</h1>
-          <button onClick={toggleVoice} aria-pressed={voice} className="rounded-full bg-panel px-3 py-1 text-sm">{voice ? t('voiceOn') : t('voiceOff')}</button>
-        </div>
-        {g && (
-          <div className="mt-3 flex items-center justify-between rounded-2xl bg-saffron px-4 py-2 text-ink">
-            <span className="font-semibold">{t('prize')}</span>
-            <span className="text-3xl font-bold tabular-nums">{birr(g.prize)} <small className="text-base">{t('birr')}</small></span>
-            <span className="text-xs font-semibold tabular-nums">{g.taken.length}/{g.total}</span>
-          </div>
-        )}
-        <div className="mt-2 grid grid-cols-2 gap-2 text-center text-sm">
-          <p className="rounded-xl bg-panel py-1">{t('main')} <b className="tabular-nums">{me ? birr(me.balance) : '—'}</b></p>
-          <p className="rounded-xl bg-panel py-1">{t('bonus')} <b className="tabular-nums text-called">{me ? birr(me.bonus) : '—'}</b></p>
-        </div>
-      </header>
-      {!conn && <p role="status" className="mx-4 mt-2 rounded-xl bg-line px-3 py-2 text-sm">{t('reconnecting')}</p>}
-      {err && <p role="alert" className="mx-4 mt-2 rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-ink">{t('err_' + err, { max: g?.cfg.max })}</p>}
-      <main className="flex-1 px-4 pb-24 pt-3">
-        {tab === 'game' && (!g ? <p className="py-16 text-center text-white/60">{t('connecting')}</p>
-          : g.phase === 'pick' ? <Pick g={g} toggle={toggle} now={now} />
-          : g.phase === 'run' ? <Run g={g} />
+      {!conn && <p role="status" className="mx-4 mt-3 rounded-xl bg-white/10 px-3 py-2 text-sm">{t('reconnecting')}</p>}
+      {err && <p role="alert" className="mx-4 mt-3 rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-ink">{t('err_' + err, { max: g?.cfg.max })}</p>}
+      <main className="flex-1 px-3 pb-24 pt-[max(1rem,env(safe-area-inset-top))]">
+        {tab === 'game' && (view === 'lobby' ? <Lobby g={g} onPlay={() => setView('play')} />
+          : !g ? <p className="py-16 text-center text-white/60">{t('connecting')}</p>
+          : g.phase === 'pick' ? <Pick g={g} me={me} toggle={toggle} now={now} onBack={toLobby} onRefresh={reload} />
+          : g.phase === 'run' ? <Bingo g={g} voice={voice} toggleVoice={toggleVoice} onLeave={toLobby} onRefresh={reload} />
           : <Result g={g} me={me} now={now} />)}
         {tab === 'history' && <History me={me} />}
         {tab === 'wallet' && <Wallet me={me} refresh={refresh} />}
         {tab === 'profile' && <Profile me={me} />}
       </main>
-      <nav className="fixed inset-x-0 bottom-0 mx-auto flex max-w-md border-t border-line bg-ink pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed inset-x-0 bottom-0 mx-auto flex max-w-md border-t border-white/10 bg-[#16123a] pb-[env(safe-area-inset-bottom)]">
         {['game', 'history', 'wallet', 'profile'].map((id) => (
           <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? 'page' : undefined} className={`flex-1 py-3 text-sm font-semibold ${tab === id ? 'text-saffron' : 'text-white/60'}`}>
             {t(id)}

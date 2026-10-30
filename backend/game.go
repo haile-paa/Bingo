@@ -20,9 +20,8 @@ import (
 
 const (
 	pickTime    = 30 * time.Second // time to choose cartelas
-	runTime     = 45 * time.Second // time numbers are called
-	callEvery   = 3 * time.Second  // one number every 3 s => 15 numbers
-	resultPause = 8 * time.Second
+	callEvery   = 3 * time.Second  // one number every 3 s, until somebody gets bingo (max 75 numbers)
+	resultPause = 8 * time.Second  // how long the winner screen stays before the next round
 )
 
 // cartelas[n] is the fixed card of cartela number n: the same card every round.
@@ -71,6 +70,7 @@ type Game struct {
 	mu       sync.Mutex
 	phase    string // pick | run | result
 	round    int64
+	gid      string // short public id of the current game
 	deadline time.Time
 	spots    map[int]Spot
 	called   []int
@@ -80,7 +80,7 @@ type Game struct {
 }
 
 func newGame() *Game {
-	return &Game{phase: "pick", deadline: time.Now().Add(pickTime), spots: map[int]Spot{},
+	return &Game{phase: "pick", gid: newGameID(), deadline: time.Now().Add(pickTime), spots: map[int]Spot{},
 		called: []int{}, clients: map[*Client]struct{}{}}
 }
 
@@ -90,6 +90,15 @@ func randInt(n int) int {
 		log.Fatal("crypto/rand failed: ", err)
 	}
 	return int(v.Int64())
+}
+
+func newGameID() string {
+	const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	b := make([]byte, 8)
+	for i := range b {
+		b[i] = abc[randInt(len(abc))]
+	}
+	return string(b)
 }
 
 func shuffle(a []int) {
@@ -167,11 +176,11 @@ func (g *Game) stateFor(uid int64) gin.H {
 		taken = append(taken, n)
 	}
 	mine, cards := g.mineOf(uid)
-	return gin.H{"type": "state", "phase": g.phase, "round": g.round, "deadline": g.deadline.UnixMilli(),
+	return gin.H{"type": "state", "phase": g.phase, "round": g.round, "gid": g.gid, "deadline": g.deadline.UnixMilli(),
 		"taken": taken, "mine": mine, "cards": cards, "prize": prizePool(len(g.spots)), "fee": entryFee,
 		"total": totalSpots, "called": g.called, "result": g.result,
-		"cfg": gin.H{"pick": int(pickTime / time.Second), "run": int(runTime / time.Second),
-			"call": int(callEvery / time.Second), "max": maxPerUser, "min": minSpots, "full": prizeFull}}
+		"cfg": gin.H{"pick": int(pickTime / time.Second), "call": int(callEvery / time.Second),
+			"max": maxPerUser, "min": minSpots, "full": prizeFull}}
 }
 
 func (g *Game) pushState() {
@@ -283,6 +292,7 @@ func (g *Game) run() {
 func (g *Game) pick() {
 	g.mu.Lock()
 	g.round++
+	g.gid = newGameID()
 	g.phase, g.deadline, g.result = "pick", time.Now().Add(pickTime), nil
 	g.spots, g.called = map[int]Spot{}, []int{}
 	g.marked = [76]bool{}
@@ -314,9 +324,11 @@ func (g *Game) winningSpots() []int {
 	return out
 }
 
+// play calls one number every callEvery and stops the moment somebody has bingo.
+// There is no time limit: after all 75 numbers every card is complete, so a winner is guaranteed.
 func (g *Game) play() {
 	g.mu.Lock()
-	g.phase, g.deadline = "run", time.Now().Add(runTime)
+	g.phase, g.deadline = "run", time.Now()
 	prize := prizePool(len(g.spots))
 	g.pushState()
 	g.mu.Unlock()
@@ -326,21 +338,23 @@ func (g *Game) play() {
 		order[i] = i + 1
 	}
 	shuffle(order)
-	for i := 0; i < int(runTime/callEvery); i++ {
+	for _, n := range order {
 		time.Sleep(callEvery)
 		g.mu.Lock()
-		n := order[i]
 		g.called = append(g.called, n)
 		g.marked[n] = true
 		wins := g.winningSpots()
 		g.pushAll(gin.H{"type": "call", "n": n, "called": g.called})
 		g.mu.Unlock()
-		if len(wins) > 0 {
+		if len(wins) > 0 { // winner found: no more numbers are called
 			g.finish(wins, prize)
 			return
 		}
 	}
-	g.finish(nil, prize)
+	g.mu.Lock()
+	wins := g.winningSpots()
+	g.mu.Unlock()
+	g.finish(wins, prize)
 }
 
 func (g *Game) finish(wins []int, prize int64) {
