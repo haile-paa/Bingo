@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Fredoka", "Noto Sans Ethiopic", ui-rounded, system-ui, sans-serif;
+  --color-ink: #1b1740;
+  --color-panel: #2a2563;
+  --color-line: #3d378a;
+  --color-saffron: #ffc531;
+  --color-mint: #2ec4b6;
+  --color-rose: #ff5c7a;
+  --color-called: #19c37d;
+}
+
+body {
+  background: var(--color-ink);
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

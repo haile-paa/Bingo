@@ -1,0 +1,434 @@
+// backend/wallet.go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"math"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+// All money is stored as integer santim (1 birr = 100).
+const (
+	entryFee      int64 = 1000   // one cartela = 10 birr
+	minDeposit    int64 = 5000
+	minWithdraw   int64 = 10000
+	signupBonus   int64 = 1000
+	referralBonus int64 = 1000
+	prizeFull     int64 = 500000 // 5000 birr when every cartela is sold
+	totalSpots          = 600
+	minSpots            = 30 // fewest cartelas needed to start a round
+	maxPerUser          = 2  // cartelas one person can hold per round
+)
+
+var (
+	amtRe   = regexp.MustCompile(`(?i)ETB\s*([\d,]+(?:\.\d{1,2})?)`)
+	txnRe   = regexp.MustCompile(`(?i)transaction\s*(?:number|no\.?|id)\s*(?:is|:)?\s*([A-Z0-9]{8,14})`)
+	phoneRe = regexp.MustCompile(`^0[79]\d{8}$`)
+)
+
+type User struct {
+	ID         int64     `bson:"_id,omitempty"`
+	Name       string    `bson:"name"`
+	Balance    int64     `bson:"balance"`
+	Bonus      int64     `bson:"bonus"`
+	ReferredBy int64     `bson:"referredBy"`
+	RefPaid    bool      `bson:"refPaid"`
+	State      string    `bson:"state,omitempty"`
+	Phone      string    `bson:"phone,omitempty"`
+	GamesWon   int64     `bson:"gamesWon"`
+	Earned     int64     `bson:"earned"`
+	CreatedAt  time.Time `bson:"createdAt"`
+}
+
+type Deposit struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	UID       int64              `bson:"uid"`
+	Amount    int64              `bson:"amount"`
+	TxnID     string             `bson:"txnId"`
+	SMS       string             `bson:"sms"`
+	ReceiverOK bool              `bson:"receiverOk"`
+	Status    string             `bson:"status"`
+	CreatedAt time.Time          `bson:"createdAt"`
+}
+
+type Withdrawal struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	UID       int64              `bson:"uid"`
+	Amount    int64              `bson:"amount"`
+	Phone     string             `bson:"phone"`
+	Status    string             `bson:"status"`
+	CreatedAt time.Time          `bson:"createdAt"`
+}
+
+type Tx struct {
+	Kind   string    `bson:"kind" json:"kind"`
+	Amount int64     `bson:"amount" json:"amount"`
+	At     time.Time `bson:"at" json:"at"`
+}
+
+func birr(a int64) string { return fmt.Sprintf("%.2f", float64(a)/100) }
+
+func ensureIndexes(ctx context.Context) {
+	add := func(coll string, keys bson.D, opts *options.IndexOptions) {
+		if _, err := db.Collection(coll).Indexes().CreateOne(ctx, mongo.IndexModel{Keys: keys, Options: opts}); err != nil {
+			log.Fatal("index ", coll, ": ", err)
+		}
+	}
+	byStatus := bson.D{{Key: "status", Value: 1}, {Key: "createdAt", Value: 1}}
+	add("deposits", bson.D{{Key: "txnId", Value: 1}}, options.Index().SetUnique(true))
+	add("deposits", byStatus, nil)
+	add("withdrawals", byStatus, nil)
+	add("txs", bson.D{{Key: "uid", Value: 1}, {Key: "at", Value: -1}}, nil)
+	add("users", bson.D{{Key: "referredBy", Value: 1}}, nil)
+	add("users", bson.D{{Key: "phone", Value: 1}}, options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"phone": bson.M{"$exists": true}}))
+}
+
+func addTx(ctx context.Context, uid int64, kind string, amount int64, ref string) {
+	_, err := db.Collection("txs").InsertOne(ctx, bson.M{"uid": uid, "kind": kind, "amount": amount, "ref": ref, "at": time.Now()})
+	if err != nil {
+		log.Println("tx log:", err)
+	}
+}
+
+func credit(ctx context.Context, uid int64, field string, amt int64) error {
+	_, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$inc": bson.M{field: amt}})
+	return err
+}
+
+// spend takes the entry fee from bonus first, then cash balance. It returns the wallet used ("" if too poor).
+func spend(ctx context.Context, uid, amt int64) (string, error) {
+	for _, field := range []string{"bonus", "balance"} {
+		res, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid, field: bson.M{"$gte": amt}}, bson.M{"$inc": bson.M{field: -amt}})
+		if err != nil {
+			return "", err
+		}
+		if res.ModifiedCount == 1 {
+			return field, nil
+		}
+	}
+	return "", nil
+}
+
+func ensureUser(ctx context.Context, id int64, name string, ref int64) (bool, error) {
+	users := db.Collection("users")
+	if ref == id {
+		ref = 0
+	}
+	if ref != 0 {
+		if n, err := users.CountDocuments(ctx, bson.M{"_id": ref}); err != nil || n == 0 {
+			ref = 0
+		}
+	}
+	res, err := users.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$setOnInsert": bson.M{
+		"name": name, "balance": int64(0), "bonus": int64(0), "gamesWon": int64(0), "earned": int64(0), "referredBy": ref, "refPaid": false, "createdAt": time.Now(),
+	}}, options.Update().SetUpsert(true))
+	if err != nil {
+		return false, err
+	}
+	return res.UpsertedCount == 1, nil
+}
+
+// createDeposit parses a pasted Telebirr SMS and queues it for admin review.
+func createDeposit(ctx context.Context, uid int64, sms string) (string, bool) {
+	am, tx := amtRe.FindStringSubmatch(sms), txnRe.FindStringSubmatch(sms)
+	if len(sms) > 1000 || am == nil || tx == nil {
+		return "መልዕክቱን ማንበብ አልተቻለም። የቴሌብር SMS ሙሉውን እንዳለ paste ያድርጉ።", false
+	}
+	value, err := strconv.ParseFloat(strings.ReplaceAll(am[1], ",", ""), 64)
+	if err != nil {
+		return "መጠኑን ማንበብ አልተቻለም። የቴሌብር SMS ሙሉውን paste ያድርጉ።", false
+	}
+	amount := int64(math.Round(value * 100))
+	if amount < minDeposit {
+		return "ዝቅተኛው ገቢ " + birr(minDeposit) + " ብር ነው።", false
+	}
+	tail := cfg.TelebirrNumber[max(0, len(cfg.TelebirrNumber)-4):]
+	name := strings.ToLower(cfg.TelebirrName)
+	name = name[:min(6, len(name))]
+	low := strings.ToLower(sms)
+	okRecv := (tail != "" && strings.Contains(sms, tail)) || (name != "" && strings.Contains(low, name))
+	d := Deposit{UID: uid, Amount: amount, TxnID: strings.ToUpper(tx[1]), SMS: sms, ReceiverOK: okRecv, Status: "pending", CreatedAt: time.Now()}
+	if _, err := db.Collection("deposits").InsertOne(ctx, d); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return "ይህ ትራንዛክሽን ቀድሞ ተልኳል።", false
+		}
+		log.Println("deposit:", err)
+		return "ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።", false
+	}
+	return "✅ " + birr(amount) + " ብር ተቀብለናል (ref " + d.TxnID + ")። አድሚን በቅርቡ ያረጋግጣል።", true
+}
+
+func payReferrer(ctx context.Context, uid int64) {
+	var u User
+	err := db.Collection("users").FindOneAndUpdate(ctx,
+		bson.M{"_id": uid, "refPaid": false, "referredBy": bson.M{"$gt": 0}},
+		bson.M{"$set": bson.M{"refPaid": true}}).Decode(&u)
+	if err != nil {
+		return
+	}
+	if err := credit(ctx, u.ReferredBy, "bonus", referralBonus); err != nil {
+		log.Println("referral:", err)
+		return
+	}
+	addTx(ctx, u.ReferredBy, "referral", referralBonus, strconv.FormatInt(uid, 10))
+	go notify(u.ReferredBy, "🎁 የጋበዙት ጓደኛ የመጀመሪያ ገቢ አድርጓል። +"+birr(referralBonus)+" ብር ተጨምሯል!")
+}
+
+func approveDeposit(ctx context.Context, id primitive.ObjectID) error {
+	deposits := db.Collection("deposits")
+	var d Deposit
+	err := deposits.FindOneAndUpdate(ctx, bson.M{"_id": id, "status": "pending"},
+		bson.M{"$set": bson.M{"status": "approved", "decidedAt": time.Now()}}).Decode(&d)
+	if err != nil {
+		return err
+	}
+	if err := credit(ctx, d.UID, "balance", d.Amount); err != nil {
+		deposits.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"status": "pending"}})
+		return err
+	}
+	addTx(ctx, d.UID, "deposit", d.Amount, d.TxnID)
+	go notify(d.UID, "✅ የ"+birr(d.Amount)+" ብር ገቢዎ ጸድቋል።")
+	payReferrer(ctx, d.UID)
+	return nil
+}
+
+func rejectDeposit(ctx context.Context, id primitive.ObjectID) error {
+	var d Deposit
+	err := db.Collection("deposits").FindOneAndUpdate(ctx, bson.M{"_id": id, "status": "pending"},
+		bson.M{"$set": bson.M{"status": "rejected", "decidedAt": time.Now()}}).Decode(&d)
+	if err != nil {
+		return err
+	}
+	go notify(d.UID, "❌ የ"+birr(d.Amount)+" ብር ገቢዎ (ref "+d.TxnID+") ሊረጋገጥ አልቻለም። ስህተት ከሆነ ድጋፍን ያነጋግሩ።")
+	return nil
+}
+
+func meHandler(c *gin.Context) {
+	ctx, uid := c.Request.Context(), c.GetInt64("uid")
+	var u User
+	if err := db.Collection("users").FindOne(ctx, bson.M{"_id": uid}).Decode(&u); err != nil {
+		c.JSON(500, gin.H{"error": "server error"})
+		return
+	}
+	refs, _ := db.Collection("users").CountDocuments(ctx, bson.M{"referredBy": uid})
+	c.JSON(200, gin.H{"id": u.ID, "name": u.Name, "balance": u.Balance, "bonus": u.Bonus,
+		"referrals": refs, "bot": cfg.BotUsername, "minWithdraw": minWithdraw, "phone": u.Phone,
+		"gamesWon": u.GamesWon, "earned": u.Earned, "telebirr": cfg.TelebirrNumber, "telebirrName": cfg.TelebirrName})
+}
+
+func txsHandler(c *gin.Context) {
+	ctx := c.Request.Context()
+	cur, err := db.Collection("txs").Find(ctx, bson.M{"uid": c.GetInt64("uid")},
+		options.Find().SetSort(bson.D{{Key: "at", Value: -1}}).SetLimit(30))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "server error"})
+		return
+	}
+	out := []Tx{}
+	if err := cur.All(ctx, &out); err != nil {
+		c.JSON(500, gin.H{"error": "server error"})
+		return
+	}
+	c.JSON(200, out)
+}
+
+// withdrawTo holds the money and queues the request for an admin: "ok", "funds" or "err".
+func withdrawTo(ctx context.Context, uid int64, phone string, amount int64) string {
+	res, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid, "balance": bson.M{"$gte": amount}},
+		bson.M{"$inc": bson.M{"balance": -amount}})
+	if err != nil {
+		return "err"
+	}
+	if res.ModifiedCount == 0 {
+		return "funds"
+	}
+	w := Withdrawal{UID: uid, Amount: amount, Phone: phone, Status: "pending", CreatedAt: time.Now()}
+	if _, err := db.Collection("withdrawals").InsertOne(ctx, w); err != nil {
+		credit(ctx, uid, "balance", amount)
+		return "err"
+	}
+	addTx(ctx, uid, "withdraw", -amount, phone)
+	return "ok"
+}
+
+func withdrawHandler(c *gin.Context) {
+	var in struct {
+		Amount int64  `json:"amount"`
+		Phone  string `json:"phone"`
+	}
+	phone := ""
+	if err := c.ShouldBindJSON(&in); err == nil {
+		phone = normPhone(in.Phone)
+	}
+	if phone == "" || in.Amount < 1 || in.Amount > 1000000 || in.Amount*100 < minWithdraw {
+		c.JSON(400, gin.H{"error": "Enter a valid Telebirr phone number and an amount of at least " + birr(minWithdraw) + " birr."})
+		return
+	}
+	switch withdrawTo(c.Request.Context(), c.GetInt64("uid"), phone, in.Amount*100) {
+	case "ok":
+		c.JSON(200, gin.H{"ok": true})
+	case "funds":
+		c.JSON(402, gin.H{"error": "Not enough withdrawable balance. Bonus money can only be used to play."})
+	default:
+		c.JSON(500, gin.H{"error": "server error"})
+	}
+}
+
+func statsHandler(c *gin.Context) {
+	ctx := c.Request.Context()
+	users, _ := db.Collection("users").EstimatedDocumentCount(ctx)
+	pd, _ := db.Collection("deposits").CountDocuments(ctx, bson.M{"status": "pending"})
+	pw, _ := db.Collection("withdrawals").CountDocuments(ctx, bson.M{"status": "pending"})
+	c.JSON(200, gin.H{"users": users, "pendingDeposits": pd, "pendingWithdrawals": pw, "online": game.online()})
+}
+
+func listHandler(coll string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		cur, err := db.Collection(coll).Find(ctx, bson.M{"status": c.DefaultQuery("status", "pending")},
+			options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}}).SetLimit(100))
+		if err != nil {
+			c.JSON(500, gin.H{"error": "server error"})
+			return
+		}
+		out := []bson.M{}
+		if err := cur.All(ctx, &out); err != nil {
+			c.JSON(500, gin.H{"error": "server error"})
+			return
+		}
+		c.JSON(200, out)
+	}
+}
+
+func depositAction(c *gin.Context) {
+	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "bad id"})
+		return
+	}
+	ctx := c.Request.Context()
+	switch c.Param("action") {
+	case "approve":
+		err = approveDeposit(ctx, id)
+	case "reject":
+		err = rejectDeposit(ctx, id)
+	default:
+		c.JSON(400, gin.H{"error": "bad action"})
+		return
+	}
+	if err != nil {
+		c.JSON(409, gin.H{"error": "Already handled or not found."})
+		return
+	}
+	c.JSON(200, gin.H{"ok": true})
+}
+
+func withdrawalAction(c *gin.Context) {
+	id, err := primitive.ObjectIDFromHex(c.Param("id"))
+	status := map[string]string{"paid": "paid", "reject": "rejected"}[c.Param("action")]
+	if err != nil || status == "" {
+		c.JSON(400, gin.H{"error": "bad request"})
+		return
+	}
+	ctx := c.Request.Context()
+	var w Withdrawal
+	err = db.Collection("withdrawals").FindOneAndUpdate(ctx, bson.M{"_id": id, "status": "pending"},
+		bson.M{"$set": bson.M{"status": status, "decidedAt": time.Now()}}).Decode(&w)
+	if err != nil {
+		c.JSON(409, gin.H{"error": "Already handled or not found."})
+		return
+	}
+	if status == "paid" {
+		go notify(w.UID, "💸 የ"+birr(w.Amount)+" ብር ጥያቄዎ ወደ "+w.Phone+" በቴሌብር ተልኳል።")
+		c.JSON(200, gin.H{"ok": true})
+		return
+	}
+	if err := credit(ctx, w.UID, "balance", w.Amount); err != nil {
+		c.JSON(500, gin.H{"error": "refund failed, check logs"})
+		return
+	}
+	addTx(ctx, w.UID, "refund", w.Amount, id.Hex())
+	go notify(w.UID, "↩️ የ"+birr(w.Amount)+" ብር የማውጣት ጥያቄዎ ተቀባይነት አላገኘም። ወደ ዋሌትዎ ተመልሷል።")
+	c.JSON(200, gin.H{"ok": true})
+}
+
+func normPhone(raw string) string {
+	d := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, raw)
+	d = strings.TrimPrefix(d, "251")
+	if len(d) == 9 {
+		d = "0" + d
+	}
+	if !phoneRe.MatchString(d) {
+		return ""
+	}
+	return d
+}
+
+// maskPhone turns 0985241404 into 09****1404.
+func maskPhone(p string) string {
+	if len(p) < 7 {
+		return p
+	}
+	return p[:2] + strings.Repeat("*", len(p)-6) + p[len(p)-4:]
+}
+
+// registerPhone links a phone to the account (one phone per account) and gives the welcome bonus.
+func registerPhone(ctx context.Context, uid int64, raw string) string {
+	phone := normPhone(raw)
+	if phone == "" {
+		return "bad"
+	}
+	res, err := db.Collection("users").UpdateOne(ctx,
+		bson.M{"_id": uid, "phone": bson.M{"$exists": false}},
+		bson.M{"$set": bson.M{"phone": phone}, "$inc": bson.M{"bonus": signupBonus}})
+	if mongo.IsDuplicateKeyError(err) {
+		return "dup"
+	}
+	if err != nil {
+		log.Println("register:", err)
+		return "err"
+	}
+	if res.ModifiedCount == 0 {
+		return "already"
+	}
+	addTx(ctx, uid, "signup_bonus", signupBonus, "")
+	return "ok"
+}
+
+// refundSpot returns a cartela's price to the wallet it was paid from.
+func refundSpot(ctx context.Context, s Spot, n int) {
+	field := "balance"
+	if s.Bonus {
+		field = "bonus"
+	}
+	if err := credit(ctx, s.UID, field, entryFee); err != nil {
+		log.Println("REFUND FAILED", s.UID, n, err)
+		return
+	}
+	addTx(ctx, s.UID, "refund", entryFee, strconv.Itoa(n))
+}
+
+func payWinner(ctx context.Context, uid, amt, round int64) error {
+	_, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid},
+		bson.M{"$inc": bson.M{"balance": amt, "earned": amt, "gamesWon": 1}})
+	if err == nil {
+		addTx(ctx, uid, "win", amt, strconv.FormatInt(round, 10))
+	}
+	return err
+}
