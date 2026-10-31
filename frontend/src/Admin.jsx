@@ -12,7 +12,7 @@ export default function Admin() {
   const [error, setError] = useState('')
 
   const call = useCallback(async (path, method = 'GET') => {
-    const res = await fetch(path, { method, headers: { 'X-Admin-Key': key } })
+    const res = await fetch((import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + path, { method, headers: { 'X-Admin-Key': key } })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Request failed')
     return data

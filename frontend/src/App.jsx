@@ -42,7 +42,7 @@ const DICT = {
     copy: 'ኮፒ', copied: 'ተቀድቷል', shareBtn: 'አጋራ', shareText: 'ከእኔ ጋር Bingo ይጫወቱ! ሲመዘገቡ 10 ብር ያገኛሉ።',
     connecting: 'ከጨዋታው ጋር በመገናኘት ላይ…', reconnecting: 'እንደገና በመገናኘት ላይ…', loading: 'በመጫን ላይ…',
     voiceOn: '🔊 ድምፅ', voiceOff: '🔇 ድምፅ',
-    tagline: 'ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!', welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10',
+    waking: 'ሰርቨሩ እየተነሳ ነው… እስከ 1 ደቂቃ ሊወስድ ይችላል', tagline: 'ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!', welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10',
     players: 'ተጫዋቾች', gameId: 'የጨዋታ ቁጥር', bet: 'ውርርድ', derash: 'ደራሽ', stake: 'ዋጋ',
     back: 'ተመለስ', refresh: 'አድስ', leave: 'ውጣ', auto: 'አውቶማቲክ',
     lobbyRound: 'አሁን ያለው ዙር', lobbyPlayers: 'የተመዘገቡ ተጫዋቾች', lobbyPrize: 'አሁን ያለው ደራሽ',
@@ -80,7 +80,7 @@ const DICT = {
     copy: 'Copy', copied: 'Copied', shareBtn: 'Share', shareText: 'Play Bingo with me! You get 10 birr when you join.',
     connecting: 'Connecting to the game…', reconnecting: 'Reconnecting…', loading: 'Loading…',
     voiceOn: '🔊 Voice', voiceOff: '🔇 Voice',
-    tagline: 'Pick your numbers. Shout BINGO. Win.', welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10',
+    waking: 'Waking up the server… this can take up to a minute', tagline: 'Pick your numbers. Shout BINGO. Win.', welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10',
     players: 'Players', gameId: 'Game ID', bet: 'Bet', derash: 'Derash', stake: 'Stake',
     back: 'Back', refresh: 'Refresh', leave: 'Leave', auto: 'Automatic',
     lobbyRound: 'Current round', lobbyPlayers: 'Players this round', lobbyPrize: 'Current prize',
@@ -92,8 +92,10 @@ const DICT = {
 const LangCtx = createContext(null)
 const useL = () => useContext(LangCtx)
 
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: AUTH } })
+  const res = await fetch(API_URL + path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: AUTH } })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Something went wrong')
   return data
@@ -128,8 +130,8 @@ function useGame(voiceOn) {
     let timer
     let closed = false
     const open = () => {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      const sock = new WebSocket(`${proto}://${location.host}/ws?a=${encodeURIComponent(AUTH)}`)
+      const base = API_URL ? API_URL.replace(/^http/, 'ws') : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
+      const sock = new WebSocket(`${base}/ws?a=${encodeURIComponent(AUTH)}`)
       ws.current = sock
       sock.onopen = () => setConn(true)
       sock.onclose = () => {
@@ -202,6 +204,35 @@ function Rules({ g }) {
   )
 }
 
+// ---------- skeleton (shown while the server is waking up) ----------
+const Sk = ({ className = '' }) => <div className={`skel ${className}`} aria-hidden />
+
+function useAfter(ms) {
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    const id = setTimeout(() => setDone(true), ms)
+    return () => clearTimeout(id)
+  }, [ms])
+  return done
+}
+
+function Waking() {
+  const { t } = useL()
+  const late = useAfter(4000)
+  return <p role="status" className={`mt-4 text-center text-sm text-white/70 ${late ? '' : 'invisible'}`}>{t('waking')}</p>
+}
+
+function GameSkeleton() {
+  return (
+    <div aria-busy="true">
+      <div className="flex justify-between"><Sk className="h-10 w-24" /><Sk className="h-10 w-24" /></div>
+      <div className="mt-3 flex gap-2">{[0, 1, 2, 3].map((i) => <Sk key={i} className="h-12 flex-1" />)}</div>
+      <div className="mt-4 grid grid-cols-8 gap-1.5">{Array.from({ length: 64 }, (_, i) => <Sk key={i} className="h-10" />)}</div>
+      <Waking />
+    </div>
+  )
+}
+
 // ---------- page 1: only "Play 10" ----------
 function Lobby({ g, onPlay }) {
   const { t } = useL()
@@ -221,7 +252,7 @@ function Lobby({ g, onPlay }) {
 
       <div className="mt-8 w-full rounded-[2rem] bg-saffron p-5 text-ink shadow-xl">
         <p className="text-sm font-semibold uppercase tracking-widest">{t('lobbyPrize')}</p>
-        <p className="text-5xl font-extrabold tabular-nums">{g ? birr(g.prize) : '—'} <span className="text-xl">{t('birr')}</span></p>
+        {g ? <p className="text-5xl font-extrabold tabular-nums">{birr(g.prize)} <span className="text-xl">{t('birr')}</span></p> : <Sk className="mx-auto mt-1 h-12 w-48 !bg-black/10" />}
       </div>
 
       <button onClick={onPlay} className="mt-5 w-full rounded-full border-4 border-white/80 bg-called py-5 text-2xl font-extrabold shadow-xl active:scale-95">
@@ -229,12 +260,15 @@ function Lobby({ g, onPlay }) {
       </button>
 
       <div className="mt-6 flex w-full justify-center gap-3 text-sm">
-        <span className="rounded-full bg-white/10 px-4 py-2">{t('round')} <b className="tabular-nums">{g ? g.round : '—'}</b></span>
-        <span className="rounded-full bg-white/10 px-4 py-2">{t('players')} <b className="tabular-nums">{g ? g.taken.length : '—'}</b></span>
+        {g ? <>
+          <span className="rounded-full bg-white/10 px-4 py-2">{t('round')} <b className="tabular-nums">{g.round}</b></span>
+          <span className="rounded-full bg-white/10 px-4 py-2">{t('players')} <b className="tabular-nums">{g.taken.length}</b></span>
+        </> : <><Sk className="h-9 w-24 !rounded-full" /><Sk className="h-9 w-28 !rounded-full" /></>}
       </div>
 
       <button onClick={() => setRules((r) => !r)} aria-expanded={rules} className="mt-6 text-sm text-white/70 underline underline-offset-4">{t('rules')}</button>
       {rules && g && <div className="w-full text-left"><Rules g={g} /></div>}
+      {!g && <Waking />}
     </div>
   )
 }
@@ -553,7 +587,7 @@ function Player() {
       {err && <p role="alert" className="mx-4 mt-3 rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-ink">{t('err_' + err, { max: g?.cfg.max })}</p>}
       <main className="flex-1 px-3 pb-24 pt-[max(1rem,env(safe-area-inset-top))]">
         {tab === 'game' && (view === 'lobby' ? <Lobby g={g} onPlay={() => setView('play')} />
-          : !g ? <p className="py-16 text-center text-white/60">{t('connecting')}</p>
+          : !g ? <GameSkeleton />
           : g.phase === 'pick' ? <Pick g={g} me={me} toggle={toggle} now={now} onBack={toLobby} onRefresh={reload} />
           : g.phase === 'run' ? <Bingo g={g} voice={voice} toggleVoice={toggleVoice} onLeave={toLobby} onRefresh={reload} />
           : <Result g={g} me={me} now={now} />)}

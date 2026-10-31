@@ -8,9 +8,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      body { margin: 0; background: linear-gradient(135deg, #5b1a9e 0%, #16123a 45%, #2b2380 100%) fixed #16123a; }
+      .boot { max-width: 28rem; margin: 0 auto; padding: 18vh 1rem 1rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+      .boot i { display: block; border-radius: 1rem; background: linear-gradient(90deg, rgba(255,255,255,.08) 25%, rgba(255,255,255,.2) 37%, rgba(255,255,255,.08) 63%); background-size: 400% 100%; animation: bootshimmer 1.4s ease infinite; }
+      @keyframes bootshimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" aria-hidden="true">
+        <i style="width:15rem;height:3rem"></i>
+        <i style="width:12rem;height:3.25rem;margin-top:1rem"></i>
+        <i style="width:100%;height:6rem;border-radius:2rem"></i>
+        <i style="width:100%;height:4.5rem;border-radius:999px"></i>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -146,6 +146,8 @@ func main() {
 	go setupBotMenu()
 
 	r := gin.Default()
+	r.Use(cors) // lets a separately hosted frontend (FRONTEND_ORIGIN) call this API
+	r.GET("/health", func(c *gin.Context) { c.String(200, "ok") }) // ping this to keep the server awake
 	r.GET("/ws", wsHandler)
 	r.POST("/bot/:secret", botWebhook)
 
@@ -186,4 +188,20 @@ func loadDotEnv(path string) {
 			os.Setenv(k, v)
 		}
 	}
+}
+// cors allows the frontend origin set in FRONTEND_ORIGIN (e.g. https://bigbingo.pages.dev).
+// When the frontend is served by this same server the variable is not needed.
+func cors(c *gin.Context) {
+	if o := os.Getenv("FRONTEND_ORIGIN"); o != "" {
+		h := c.Writer.Header()
+		h.Set("Access-Control-Allow-Origin", strings.TrimRight(o, "/"))
+		h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Key")
+		h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		h.Set("Vary", "Origin")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+	}
+	c.Next()
 }
