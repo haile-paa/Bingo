@@ -34,6 +34,8 @@ const (
 var (
 	amtRe   = regexp.MustCompile(`(?i)ETB\s*([\d,]+(?:\.\d{1,2})?)`)
 	txnRe   = regexp.MustCompile(`(?i)transaction\s*(?:number|no\.?|id)\s*(?:is|:)?\s*([A-Z0-9]{8,14})`)
+	// the receipt link Telebirr sends: https://transactioninfo.ethiotelecom.et/receipt/DJU7HRHTVL
+	linkRe  = regexp.MustCompile(`(?i)transactioninfo\.ethiotelecom\.et/receipt/([A-Z0-9]{8,14})`)
 	phoneRe = regexp.MustCompile(`^0[79]\d{8}$`)
 )
 
@@ -139,26 +141,48 @@ func ensureUser(ctx context.Context, id int64, name string, ref int64) (bool, er
 	return res.UpsertedCount == 1, nil
 }
 
-// createDeposit parses a pasted Telebirr SMS and queues it for admin review.
-func createDeposit(ctx context.Context, uid int64, sms string) (string, bool) {
-	am, tx := amtRe.FindStringSubmatch(sms), txnRe.FindStringSubmatch(sms)
-	if len(sms) > 1000 || am == nil || tx == nil {
-		return "መልዕክቱን ማንበብ አልተቻለም። የቴሌብር SMS ሙሉውን እንዳለ paste ያድርጉ።", false
+// createDeposit takes what the user pasted - the full Telebirr SMS, or just the receipt link -
+// and queues it for admin review. declared is the amount the user typed in the previous step;
+// it is only used for a link, because a link does not contain the amount.
+func createDeposit(ctx context.Context, uid int64, text string, declared int64) (string, bool) {
+	const bad = "መልዕክቱን ማንበብ አልተቻለም። የቴሌብር SMS ሙሉውን ወይም የደረሰኝ ሊንኩን paste ያድርጉ።"
+	if len(text) > 1000 {
+		return bad, false
 	}
-	value, err := strconv.ParseFloat(strings.ReplaceAll(am[1], ",", ""), 64)
-	if err != nil {
-		return "መጠኑን ማንበብ አልተቻለም። የቴሌብር SMS ሙሉውን paste ያድርጉ።", false
+	am, tx := amtRe.FindStringSubmatch(text), txnRe.FindStringSubmatch(text)
+	var amount int64
+	stored := text
+	switch {
+	case am != nil && tx != nil: // full SMS
+		value, err := strconv.ParseFloat(strings.ReplaceAll(am[1], ",", ""), 64)
+		if err != nil {
+			return bad, false
+		}
+		amount = int64(math.Round(value * 100))
+	default: // receipt link (also works when the SMS text is pasted without its "transaction number" part)
+		m := linkRe.FindStringSubmatch(text)
+		if m == nil {
+			return bad, false
+		}
+		tx = m
+		stored = "https://transactioninfo.ethiotelecom.et/receipt/" + strings.ToUpper(m[1]) // the admin opens this to check it
+		amount = declared
+		if am != nil {
+			if v, err := strconv.ParseFloat(strings.ReplaceAll(am[1], ",", ""), 64); err == nil {
+				amount = int64(math.Round(v * 100))
+				stored = text
+			}
+		}
 	}
-	amount := int64(math.Round(value * 100))
 	if amount < minDeposit {
-		return "ዝቅተኛው ገቢ " + birr(minDeposit) + " ብር ነው።", false
+		return "ዝቅተኛው ገቢ " + birr(minDeposit) + " ብር ነው። ወይም መጠኑ አልታወቀም፤ ከ«ገንዘብ አስገባ» እንደገና ይጀምሩ።", false
 	}
 	tail := cfg.TelebirrNumber[max(0, len(cfg.TelebirrNumber)-4):]
 	name := strings.ToLower(cfg.TelebirrName)
 	name = name[:min(6, len(name))]
-	low := strings.ToLower(sms)
-	okRecv := (tail != "" && strings.Contains(sms, tail)) || (name != "" && strings.Contains(low, name))
-	d := Deposit{UID: uid, Amount: amount, TxnID: strings.ToUpper(tx[1]), SMS: sms, ReceiverOK: okRecv, Status: "pending", CreatedAt: time.Now()}
+	low := strings.ToLower(text)
+	okRecv := (tail != "" && strings.Contains(text, tail)) || (name != "" && strings.Contains(low, name))
+	d := Deposit{UID: uid, Amount: amount, TxnID: strings.ToUpper(tx[1]), SMS: stored, ReceiverOK: okRecv, Status: "pending", CreatedAt: time.Now()}
 	if _, err := db.Collection("deposits").InsertOne(ctx, d); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return "ይህ ትራንዛክሽን ቀድሞ ተልኳል።", false

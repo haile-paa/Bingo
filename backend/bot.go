@@ -19,7 +19,7 @@ const (
 	msgChoose  = "አማራጭ ይምረጡ፦"
 	msgNeedReg = "መጀመሪያ «ተመዝገብ» ን ተጭነው ስልክ ቁጥርዎን ያጋሩ።"
 	msgErr     = "ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።"
-	msgHelp    = "📖 መመሪያ\n\n1. «ተመዝገብ» ን ተጭነው ስልክ ቁጥርዎን ያጋሩ።\n2. «ገንዘብ አስገባ» ን ተጭነው ከ50 ብር ጀምሮ በቴሌብር ይላኩ፣ የደረሰዎትን SMS ለቦቱ paste ያድርጉ።\n3. «ተጫወት» ን ተጭነው ካርቴላ ይምረጡ (አንዱ 10 ብር፣ ከአንድ በላይ መያዝ ይችላሉ)።\n4. ካርቴላ ለመምረጥ 30 ሰከንድ አለ፤ ከዚያ ቁጥሮች ይጠራሉ። የተጠራ ቁጥር በካርቴላዎ ላይ አረንጓዴ ይሆናል።\n5. መስመር የሞላ የመጀመሪያው ካርቴላ ያሸንፋል። ሁለት ካሸነፉ ሽልማቱ እኩል ይካፈላል፤ ማንም ካላሸነፈ ክፍያ ይመለሳል።"
+	msgHelp    = "📖 መመሪያ\n\n1. «ተመዝገብ» ን ተጭነው ስልክ ቁጥርዎን ያጋሩ።\n2. «ገንዘብ አስገባ» ን ተጭነው ከ50 ብር ጀምሮ በቴሌብር ይላኩ፣ የደረሰዎትን SMS ወይም የደረሰኝ ሊንክ ለቦቱ paste ያድርጉ።\n3. «ተጫወት» ን ተጭነው ካርቴላ ይምረጡ (አንዱ 10 ብር፣ ከአንድ በላይ መያዝ ይችላሉ)።\n4. ካርቴላ ለመምረጥ 30 ሰከንድ አለ፤ ከዚያ ቁጥሮች ይጠራሉ። የተጠራ ቁጥር በካርቴላዎ ላይ አረንጓዴ ይሆናል።\n5. መስመር የሞላ የመጀመሪያው ካርቴላ ያሸንፋል። ሁለት ካሸነፉ ሽልማቱ እኩል ይካፈላል።"
 )
 
 var httpc = &http.Client{Timeout: 10 * time.Second}
@@ -253,17 +253,19 @@ func onMessage(ctx context.Context, m *Message) {
 		sendMenu(uid, msgChoose)
 		return
 	}
-	switch u.State {
+	state, arg, _ := strings.Cut(u.State, ":") // "dep_sms:5000" = waiting for the SMS/link of a 50 birr deposit
+	switch state {
 	case "dep_amount":
 		amt, ok := parseBirr(text, minDeposit, 100000)
 		if !ok {
 			sendText(uid, "ከ"+birr(minDeposit)+" ብር ጀምሮ ትክክለኛ ቁጥር ያስገቡ።", nil)
 			return
 		}
-		setState(ctx, uid, "dep_sms")
-		sendText(uid, "1. ከታች ባለው የቴሌብር አካውንት "+strconv.FormatInt(amt, 10)+" ብር ያስገቡ\n\nስም፦ "+cfg.TelebirrName+"\nስልክ፦ "+cfg.TelebirrNumber+"\n\n2. የከፈሉበትን አጭር የጽሁፍ መልዕክት (SMS) copy በማድረግ እዚህ ላይ paste አድርገው ይላኩት 👇", nil)
+		setState(ctx, uid, "dep_sms:"+strconv.FormatInt(amt*100, 10))
+		sendText(uid, "1. ከታች ባለው የቴሌብር አካውንት "+strconv.FormatInt(amt, 10)+" ብር ያስገቡ\n\nስም፦ "+cfg.TelebirrName+"\nስልክ፦ "+cfg.TelebirrNumber+"\n\n2. የከፈሉበትን አጭር የጽሁፍ መልዕክት (SMS) ሙሉውን ወይም የቴሌብር ደረሰኝ ሊንክ (link) copy በማድረግ እዚህ ላይ paste አድርገው ይላኩት 👇", nil)
 	case "dep_sms":
-		reply, ok := createDeposit(ctx, uid, text)
+		declared, _ := strconv.ParseInt(arg, 10, 64)
+		reply, ok := createDeposit(ctx, uid, text, declared)
 		if !ok {
 			sendText(uid, reply, nil)
 			return

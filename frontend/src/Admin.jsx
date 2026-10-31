@@ -104,7 +104,9 @@ export default function Admin() {
                 <button onClick={() => act(r._id, 'reject')} className="rounded-xl bg-rose px-3 py-2 text-sm font-bold text-ink">Reject</button>
               </div>
             </div>
-            {isDep && <pre className="mt-3 whitespace-pre-wrap rounded-xl bg-ink p-3 text-xs text-white/80">{r.sms}</pre>}
+            {isDep && (/^https:\/\/transactioninfo\.ethiotelecom\.et\//.test(r.sms)
+              ? <a href={r.sms} target="_blank" rel="noreferrer" className="mt-3 block break-all rounded-xl bg-ink p-3 text-xs text-saffron underline">{r.sms}</a>
+              : <pre className="mt-3 whitespace-pre-wrap rounded-xl bg-ink p-3 text-xs text-white/80">{r.sms}</pre>)}
           </li>
         ))}
       </ul>
