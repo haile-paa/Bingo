@@ -265,6 +265,9 @@ func onMessage(ctx context.Context, m *Message) {
 		sendText(uid, "1. ከታች ባለው የቴሌብር አካውንት "+strconv.FormatInt(amt, 10)+" ብር ያስገቡ\n\nስም፦ "+cfg.TelebirrName+"\nስልክ፦ "+cfg.TelebirrNumber+"\n\n2. የከፈሉበትን አጭር የጽሁፍ መልዕክት (SMS) ሙሉውን ወይም የቴሌብር ደረሰኝ ሊንክ (link) copy በማድረግ እዚህ ላይ paste አድርገው ይላኩት 👇", nil)
 	case "dep_sms":
 		declared, _ := strconv.ParseInt(arg, 10, 64)
+		if cfg.VerifyETKey != "" {
+			sendText(uid, "⏳ እየተረጋገጠ ነው…", nil)
+		}
 		reply, ok := createDeposit(ctx, uid, text, declared)
 		if !ok {
 			sendText(uid, reply, nil)
@@ -330,7 +333,7 @@ func runAction(ctx context.Context, from tgUser, data string) {
 		sendText(uid, "🤑 ማውጣት የሚፈልጉትን መጠን (ብር) ያስገቡ። ዝቅተኛው "+birr(minWithdraw)+" ብር ነው።\nየሚወጣ ሂሳብ፦ "+birr(u.Balance)+" ብር\nገንዘቡ ወደ "+u.Phone+" በቴሌብር ይላካል።", nil)
 	case "inv":
 		link := "https://t.me/" + cfg.BotUsername + "?start=ref_" + strconv.FormatInt(uid, 10)
-		sendMenu(uid, "🎁 ጓደኞችዎን ይጋብዙ፦\n"+link+"\n\nጓደኛዎ ሲመዘገብ "+birr(signupBonus)+" ብር ያገኛል። የመጀመሪያ ገቢው ሲጸድቅ እርስዎ "+birr(referralBonus)+" ብር ያገኛሉ።")
+		sendMenu(uid, "🎁 ጓደኞችዎን ይጋብዙ፦\n"+link+"\n\nጓደኛዎ ሲመዘገብ "+birr(signupBonus)+" ብር ያገኛል። የመጀመሪያ ገቢው ሲጸድቅ እርስዎ "+birr(referralBonus)+" ብር ያገኛሉ።\n\n🎉 ገቢ ያደረጉ "+strconv.FormatInt(inviteGoal, 10)+" ጓደኞች ሲጋብዙ "+birr(inviteReward)+" ብር ያገኛሉ። (አሁን፦ "+strconv.FormatInt(u.RefQualified%inviteGoal, 10)+"/"+strconv.FormatInt(inviteGoal, 10)+")")
 	case "sup":
 		if cfg.SupportUser == "" {
 			sendMenu(uid, "ድጋፍ በቅርቡ ይጨመራል።")

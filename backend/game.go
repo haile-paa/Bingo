@@ -60,6 +60,7 @@ type Result struct {
 }
 
 type Client struct {
+	game *Game
 	uid  int64
 	name string
 	conn *websocket.Conn
@@ -68,6 +69,7 @@ type Client struct {
 
 type Game struct {
 	mu       sync.Mutex
+	fee      int64  // stake of this room in santim: 500 = 5 birr, 1000 = 10 birr
 	phase    string // pick | run | result
 	round    int64
 	gid      string // short public id of the current game
@@ -79,8 +81,42 @@ type Game struct {
 	clients  map[*Client]struct{}
 }
 
-func newGame() *Game {
-	return &Game{phase: "pick", gid: newGameID(), deadline: time.Now().Add(pickTime), spots: map[int]Spot{},
+// games holds one room per stake (in birr). Each room runs its own rounds.
+var games = map[int]*Game{}
+
+var stakes = []int{5, 10}
+
+func startGames() {
+	for _, st := range stakes {
+		g := newGame(int64(st) * 100)
+		games[st] = g
+		go g.run()
+	}
+}
+
+func onlineTotal() int {
+	n := 0
+	for _, g := range games {
+		n += g.online()
+	}
+	return n
+}
+
+// roomsHandler is public: the first page shows the live numbers of every room.
+func roomsHandler(c *gin.Context) {
+	out := []gin.H{}
+	for _, st := range stakes {
+		g := games[st]
+		g.mu.Lock()
+		out = append(out, gin.H{"stake": st, "fee": g.fee, "phase": g.phase, "round": g.round,
+			"players": len(g.spots), "prize": g.prizePool(len(g.spots)), "total": totalSpots})
+		g.mu.Unlock()
+	}
+	c.JSON(200, out)
+}
+
+func newGame(fee int64) *Game {
+	return &Game{fee: fee, phase: "pick", gid: newGameID(), deadline: time.Now().Add(pickTime), spots: map[int]Spot{},
 		called: []int{}, clients: map[*Client]struct{}{}}
 }
 
@@ -128,8 +164,8 @@ func hasBingo(card [5][5]int, m *[76]bool) bool {
 	return d1 || d2
 }
 
-// prizePool: 5000 birr when all 600 cartelas are sold, proportional below that (30 => 250 birr).
-func prizePool(n int) int64 { return int64(n) * prizeFull / totalSpots }
+// prizePool: players get payoutPercent (75%) of all stakes paid in; the company keeps the rest (25%).
+func (g *Game) prizePool(n int) int64 { return int64(n) * g.fee * payoutPercent / 100 }
 
 // --- messaging (callers hold g.mu) ---
 
@@ -177,10 +213,10 @@ func (g *Game) stateFor(uid int64) gin.H {
 	}
 	mine, cards := g.mineOf(uid)
 	return gin.H{"type": "state", "phase": g.phase, "round": g.round, "gid": g.gid, "deadline": g.deadline.UnixMilli(),
-		"taken": taken, "mine": mine, "cards": cards, "prize": prizePool(len(g.spots)), "fee": entryFee,
+		"taken": taken, "mine": mine, "cards": cards, "prize": g.prizePool(len(g.spots)), "fee": g.fee,
 		"total": totalSpots, "called": g.called, "result": g.result,
 		"cfg": gin.H{"pick": int(pickTime / time.Second), "call": int(callEvery / time.Second),
-			"max": maxPerUser, "min": minSpots, "full": prizeFull}}
+			"max": maxPerUser, "min": minSpots, "pct": payoutPercent}}
 }
 
 func (g *Game) pushState() {
@@ -232,7 +268,7 @@ func (g *Game) toggle(cl *Client, n int) {
 	}
 	if held { // tap again to release and get the money back
 		delete(g.spots, n)
-		refundSpot(ctx, s, n)
+		refundSpot(ctx, s, n, g.fee)
 		g.announce(cl, n, false)
 		return
 	}
@@ -260,7 +296,7 @@ func (g *Game) claim(ctx context.Context, cl *Client, n int) string {
 	if owned >= maxPerUser {
 		return "limit"
 	}
-	field, err := spend(ctx, cl.uid, entryFee)
+	field, err := spend(ctx, cl.uid, g.fee)
 	if err != nil {
 		log.Println("claim:", err)
 		return "server"
@@ -268,7 +304,7 @@ func (g *Game) claim(ctx context.Context, cl *Client, n int) string {
 	if field == "" {
 		return "funds"
 	}
-	addTx(ctx, cl.uid, "entry", -entryFee, strconv.Itoa(n))
+	addTx(ctx, cl.uid, "entry", -g.fee, strconv.Itoa(n))
 	g.spots[n] = Spot{UID: cl.uid, Bonus: field == "bonus"}
 	return ""
 }
@@ -276,7 +312,7 @@ func (g *Game) claim(ctx context.Context, cl *Client, n int) string {
 func (g *Game) announce(cl *Client, n int, on bool) {
 	mine, cards := g.mineOf(cl.uid)
 	cl.pushJSON(gin.H{"type": "mine", "mine": mine, "cards": cards})
-	g.pushAll(gin.H{"type": "spot", "n": n, "on": on, "prize": prizePool(len(g.spots))})
+	g.pushAll(gin.H{"type": "spot", "n": n, "on": on, "prize": g.prizePool(len(g.spots))})
 }
 
 // --- round loop ---
@@ -329,7 +365,7 @@ func (g *Game) winningSpots() []int {
 func (g *Game) play() {
 	g.mu.Lock()
 	g.phase, g.deadline = "run", time.Now()
-	prize := prizePool(len(g.spots))
+	prize := g.prizePool(len(g.spots))
 	g.pushState()
 	g.mu.Unlock()
 
@@ -371,7 +407,7 @@ func (g *Game) finish(wins []int, prize int64) {
 	res := &Result{Winners: []WinnerOut{}}
 	if len(wins) == 0 { // nobody got bingo: give every stake back
 		for n, s := range spots {
-			refundSpot(ctx, s, n)
+			refundSpot(ctx, s, n, g.fee)
 		}
 	} else {
 		sort.Ints(wins)
@@ -416,19 +452,25 @@ func wsHandler(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+	stake, _ := strconv.Atoi(c.DefaultQuery("s", "10"))
+	room := games[stake]
+	if room == nil {
+		c.Status(http.StatusBadRequest)
+		return
+	}
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
-	cl := &Client{uid: uid, name: name, conn: conn, send: make(chan []byte, 32)}
-	game.add(cl)
+	cl := &Client{game: room, uid: uid, name: name, conn: conn, send: make(chan []byte, 32)}
+	room.add(cl)
 	go cl.writeLoop()
 	cl.readLoop()
 }
 
 func (cl *Client) readLoop() {
 	defer func() {
-		game.remove(cl)
+		cl.game.remove(cl)
 		cl.conn.Close()
 	}()
 	cl.conn.SetReadLimit(512)
@@ -445,7 +487,7 @@ func (cl *Client) readLoop() {
 			return
 		}
 		if m.Type == "toggle" {
-			game.toggle(cl, m.N)
+			cl.game.toggle(cl, m.N)
 		}
 	}
 }

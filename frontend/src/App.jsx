@@ -23,10 +23,10 @@ const DICT = {
     bingo: 'ቢንጎ!', youWon: 'እርስዎ አሸነፉ! 🎉', winCartela: 'አሸናፊ ካርቴላ',
     noWinner: 'አሸናፊ የለም', refunded: 'ክፍያዎ ወደ ዋሌትዎ ተመልሷል።', nextIn: 'ቀጣይ ጨዋታ በ{n} ሰከንድ ይጀምራል',
     rules: 'ደንቦች',
-    r1: 'ካርቴላ ለመምረጥ {pick} ሰከንድ አለዎት። እያንዳንዱ ካርቴላ {fee} ብር ነው።',
+    r1: 'ካርቴላ ለመምረጥ {pick} ሰከንድ አለዎት። ዋጋው 5 ወይም 10 ብር ነው (በመረጡት ጨዋታ)።',
     r2: 'ከዚያ ወደ ጨዋታው ይገባሉ፤ ቁጥሮች አንድ በአንድ ይጠራሉ። የተጠራ ቁጥር በካርቴላዎ ላይ አረንጓዴ ይሆናል።',
     r3: 'መስመር (አግድም፣ ቁልቁል ወይም ሰያፍ) የሞላ የመጀመሪያው ካርቴላ ያሸንፋል፤ አሸናፊ ሲገኝ ቁጥር መጥራት ይቆማል።',
-    r4: '{total} ካርቴላ ሙሉ ሲሸጥ ሽልማቱ {full} ብር ነው። ባነሰ ካርቴላ ሽልማቱ በተመጣጣኝ ይሰላል።',
+    r4: 'በእያንዳንዱ ጨዋታ {total} ቦታ አለ። ከተከፈለው ጠቅላላ ገንዘብ {pct}% ለአሸናፊ ይሰጣል፤ ቀሪው {cut}% የአገልግሎት ክፍያ ነው።',
     r5: 'ሁለት ካርቴላ በአንድ ጊዜ ቢያሸንፉ ሽልማቱ እኩል ይካፈላል።',
     err_closed: 'መምረጫ ጊዜው አልፏል። ቀጣዩን ዙር ይጠብቁ።', err_taken: 'ይህ ካርቴላ ተይዟል።',
     err_funds: 'በቂ ሂሳብ የለዎትም። በቦቱ ውስጥ ገንዘብ ያስገቡ።',
@@ -38,11 +38,11 @@ const DICT = {
     amount: 'መጠን (ብር፣ ዝቅተኛ {min})', send: 'ጥያቄ ላክ', sent: 'ጥያቄዎ ተልኳል። አድሚን በቴሌብር ይልካል።',
     withdrawable: 'የሚወጣ', playOnly: 'ለጨዋታ ብቻ', noTx: 'እስካሁን እንቅስቃሴ የለም።',
     wins: 'ያሸነፉ ጨዋታዎች', invites: 'የጋበዟቸው', earned: 'ጠቅላላ ገቢ', language: 'ቋንቋ',
-    inviteTitle: 'ጓደኞችን ይጋብዙ', inviteBody: 'ጓደኛዎ ሲመዘገብ 10 ብር ያገኛል። የመጀመሪያ ገቢው ሲጸድቅ እርስዎ 10 ብር ያገኛሉ።',
+    inviteTitle: 'ጓደኞችን ይጋብዙ', inviteBody: 'ጓደኛዎ ሲመዘገብ 10 ብር ያገኛል። የመጀመሪያ ገቢው ሲጸድቅ እርስዎ 10 ብር ያገኛሉ። ገቢ ያደረጉ 20 ጓደኞች ሲጋብዙ 150 ብር ያገኛሉ።',
     copy: 'ኮፒ', copied: 'ተቀድቷል', shareBtn: 'አጋራ', shareText: 'ከእኔ ጋር Bingo ይጫወቱ! ሲመዘገቡ 10 ብር ያገኛሉ።',
     connecting: 'ከጨዋታው ጋር በመገናኘት ላይ…', reconnecting: 'እንደገና በመገናኘት ላይ…', loading: 'በመጫን ላይ…',
     voiceOn: '🔊 ድምፅ', voiceOff: '🔇 ድምፅ',
-    waking: 'ሰርቨሩ እየተነሳ ነው… እስከ 1 ደቂቃ ሊወስድ ይችላል', tagline: 'ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!', welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10',
+    waking: 'ሰርቨሩ እየተነሳ ነው… እስከ 1 ደቂቃ ሊወስድ ይችላል', tagline: 'ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!', welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10', play5: 'ተጫወት 5', statPct: 'ለአሸናፊ የሚከፈል', statSpots: 'ቦታ በአንድ ጨዋታ', statSold: 'አሁን የተያዙ ካርቴላዎች', prizeNow: 'ደራሽ',
     players: 'ተጫዋቾች', gameId: 'የጨዋታ ቁጥር', bet: 'ውርርድ', derash: 'ደራሽ', stake: 'ዋጋ',
     back: 'ተመለስ', refresh: 'አድስ', leave: 'ውጣ', auto: 'አውቶማቲክ',
     lobbyRound: 'አሁን ያለው ዙር', lobbyPlayers: 'የተመዘገቡ ተጫዋቾች', lobbyPrize: 'አሁን ያለው ደራሽ',
@@ -61,10 +61,10 @@ const DICT = {
     bingo: 'BINGO!', youWon: 'You won! 🎉', winCartela: 'Winning cartela',
     noWinner: 'No winner', refunded: 'Your payment was returned to your wallet.', nextIn: 'Next game starts in {n}s',
     rules: 'Rules',
-    r1: 'You have {pick} seconds to pick cartelas. Each costs {fee} birr.',
+    r1: 'You have {pick} seconds to pick cartelas. Each costs 5 or 10 birr, depending on the game you choose.',
     r2: 'Then the game starts and numbers are called one by one. Called numbers turn green on your cartela.',
     r3: 'The first cartela to complete a line (row, column or diagonal) wins. Calling stops as soon as there is a winner.',
-    r4: 'With all {total} cartelas sold the prize is {full} birr. With fewer, it scales down proportionally.',
+    r4: 'Each game has {total} spots. Winners get {pct}% of all stakes paid in; the other {cut}% is the service fee.',
     r5: 'If several cartelas win together the prize is split equally.',
     err_closed: 'Picking is closed. Wait for the next round.', err_taken: 'That cartela is taken.',
     err_funds: 'Not enough balance. Deposit in the bot.',
@@ -76,11 +76,11 @@ const DICT = {
     amount: 'Amount (birr, min {min})', send: 'Send request', sent: 'Request sent. An admin will pay you by Telebirr.',
     withdrawable: 'Withdrawable', playOnly: 'Play only', noTx: 'No activity yet.',
     wins: 'Games won', invites: 'Invited', earned: 'Total earned', language: 'Language',
-    inviteTitle: 'Invite friends', inviteBody: 'Your friend gets 10 birr when they join. You get 10 birr when their first deposit is approved.',
+    inviteTitle: 'Invite friends', inviteBody: 'Your friend gets 10 birr when they join. You get 10 birr when their first deposit is approved. Invite 20 friends who deposit and get 150 birr.',
     copy: 'Copy', copied: 'Copied', shareBtn: 'Share', shareText: 'Play Bingo with me! You get 10 birr when you join.',
     connecting: 'Connecting to the game…', reconnecting: 'Reconnecting…', loading: 'Loading…',
     voiceOn: '🔊 Voice', voiceOff: '🔇 Voice',
-    waking: 'Waking up the server… this can take up to a minute', tagline: 'Pick your numbers. Shout BINGO. Win.', welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10',
+    waking: 'Waking up the server… this can take up to a minute', tagline: 'Pick your numbers. Shout BINGO. Win.', welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10', play5: 'Play 5', statPct: 'Paid to winners', statSpots: 'Spots per game', statSold: 'Cartelas taken now', prizeNow: 'Prize',
     players: 'Players', gameId: 'Game ID', bet: 'Bet', derash: 'Derash', stake: 'Stake',
     back: 'Back', refresh: 'Refresh', leave: 'Leave', auto: 'Automatic',
     lobbyRound: 'Current round', lobbyPlayers: 'Players this round', lobbyPrize: 'Current prize',
@@ -101,12 +101,23 @@ async function api(path, opts = {}) {
   return data
 }
 
+// One shared <audio> element: once a tap has unlocked it, calls can play by themselves.
+// /voice/<n>.mp3 says the letter and number in Amharic, e.g. "ቢ፣ አሥራ ስድስት".
+const voiceAudio = typeof Audio !== 'undefined' ? new Audio() : null
+
+function unlockVoice() {
+  if (!voiceAudio) return
+  voiceAudio.muted = true
+  voiceAudio.src = '/voice/1.mp3'
+  voiceAudio.play().then(() => { voiceAudio.pause(); voiceAudio.muted = false }).catch(() => { voiceAudio.muted = false })
+}
+
 function speak(n) {
-  if (!('speechSynthesis' in window)) return
-  speechSynthesis.cancel()
-  const u = new SpeechSynthesisUtterance(`${letterOf(n)}. ${n}`)
-  u.rate = 0.85
-  speechSynthesis.speak(u)
+  if (!voiceAudio) return
+  voiceAudio.pause()
+  voiceAudio.muted = false
+  voiceAudio.src = `/voice/${n}.mp3`
+  voiceAudio.play().catch(() => {})
 }
 
 function useNow() {
@@ -118,7 +129,21 @@ function useNow() {
   return now
 }
 
-function useGame(voiceOn) {
+// live numbers of every room, for the first page
+function useRooms(active) {
+  const [rooms, setRooms] = useState(null)
+  useEffect(() => {
+    if (!active) return undefined
+    let stop = false
+    const load = () => fetch(API_URL + '/api/rooms').then((r) => r.json()).then((d) => !stop && setRooms(d)).catch(() => {})
+    load()
+    const id = setInterval(load, 3000)
+    return () => { stop = true; clearInterval(id) }
+  }, [active])
+  return rooms
+}
+
+function useGame(voiceOn, stake) {
   const [g, setG] = useState(null)
   const [conn, setConn] = useState(false)
   const [err, setErr] = useState('')
@@ -127,11 +152,14 @@ function useGame(voiceOn) {
   voice.current = voiceOn
 
   useEffect(() => {
+    setG(null)
+    setConn(false)
+    if (!stake) return undefined
     let timer
     let closed = false
     const open = () => {
       const base = API_URL ? API_URL.replace(/^http/, 'ws') : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
-      const sock = new WebSocket(`${base}/ws?a=${encodeURIComponent(AUTH)}`)
+      const sock = new WebSocket(`${base}/ws?a=${encodeURIComponent(AUTH)}&s=${stake}`)
       ws.current = sock
       sock.onopen = () => setConn(true)
       sock.onclose = () => {
@@ -163,7 +191,7 @@ function useGame(voiceOn) {
       clearTimeout(timer)
       ws.current?.close()
     }
-  }, [])
+  }, [stake])
 
   const toggle = useCallback((n) => ws.current?.send(JSON.stringify({ type: 'toggle', n })), [])
   // closing the socket makes it reconnect by itself and the server sends a fresh full state
@@ -192,9 +220,8 @@ function Cartela({ n, card, called, bg = 'bg-panel', compact = false }) {
   )
 }
 
-function Rules({ g }) {
+function Rules({ v }) {
   const { t } = useL()
-  const v = { pick: g.cfg.pick, fee: birr(g.fee), total: g.total, full: birr(g.cfg.full) }
   return (
     <section className="glass mt-4 rounded-3xl p-4">
       <ol className="list-decimal space-y-2 pl-5 text-sm text-white/80">
@@ -203,6 +230,8 @@ function Rules({ g }) {
     </section>
   )
 }
+
+const RULE_VALUES = { pick: 30, total: 200, pct: 75, cut: 25 }
 
 // ---------- skeleton (shown while the server is waking up) ----------
 const Sk = ({ className = '' }) => <div className={`skel ${className}`} aria-hidden />
@@ -233,43 +262,47 @@ function GameSkeleton() {
   )
 }
 
-// ---------- page 1: only "Play 10" ----------
-function Lobby({ g, onPlay }) {
+// ---------- page 1: choose the 5 or 10 birr game ----------
+function Lobby({ rooms, onPlay }) {
   const { t } = useL()
   const [rules, setRules] = useState(false)
-  const balls = [...'BINGO']
+  const sold = rooms ? rooms.reduce((n, r) => n + r.players, 0) : 0
   return (
-    <div className="flex min-h-[80dvh] flex-col items-center justify-center text-center">
-      <div className="flex gap-2" aria-hidden>
-        {balls.map((l, i) => (
-          <span key={l} className={`grid size-12 place-items-center rounded-full text-xl font-extrabold shadow-lg ring-2 ring-white/70 ${LETTER_BG[i]}`} style={{ transform: `translateY(${i % 2 ? 8 : -8}px)` }}>{l}</span>
+    <>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="grid size-12 place-items-center rounded-full bg-white text-2xl font-bold text-purple-700 shadow-lg">{BRAND[0]}</span>
+          <h1 className="text-2xl font-bold">{BRAND}</h1>
+        </div>
+        <button onClick={() => setRules((r) => !r)} aria-expanded={rules} className="glass rounded-xl px-4 py-2 font-semibold">
+          ⓘ {t('rules')}
+        </button>
+      </div>
+      {rules && <Rules v={RULE_VALUES} />}
+      <h2 className="mt-12 text-center text-4xl font-bold leading-tight">
+        {t('welcomeTo')} <span className="bg-gradient-to-r from-yellow-300 to-orange-500 bg-clip-text text-transparent">{BRAND}</span>
+      </h2>
+      <section className="glass glass-gold mt-8 rounded-3xl p-5">
+        <h3 className="text-center font-semibold">▷ {t('chooseStake')}</h3>
+        <button onClick={() => onPlay(5)} className="gloss mt-6 w-full rounded-2xl bg-gradient-to-r from-[#00d58f] to-[#009a8b] py-4 text-xl font-bold">
+          ▷ {t('play5')}
+          {rooms && <span className="block text-xs font-medium text-white/80">{t('prizeNow')} {birr(rooms[0].prize)} · {rooms[0].players}/{rooms[0].total}</span>}
+        </button>
+        <button onClick={() => onPlay(10)} className="gloss mt-4 w-full rounded-2xl bg-gradient-to-r from-[#0a9bff] to-[#5a3cf5] py-4 text-xl font-bold">
+          ▷ {t('play10')}
+          {rooms && <span className="block text-xs font-medium text-white/80">{t('prizeNow')} {birr(rooms[1].prize)} · {rooms[1].players}/{rooms[1].total}</span>}
+        </button>
+      </section>
+      <section className="glass mt-6 space-y-6 rounded-3xl px-5 py-8 text-center">
+        {[[`${RULE_VALUES.pct}%`, t('statPct')], [RULE_VALUES.total, t('statSpots')], [rooms ? sold : null, t('statSold')]].map(([n, label]) => (
+          <div key={label}>
+            {n === null ? <Sk className="mx-auto h-9 w-24" /> : <p className="text-4xl font-bold tabular-nums">{n}</p>}
+            <p className="mt-1 text-purple-200">{label}</p>
+          </div>
         ))}
-      </div>
-      <h1 className="mt-10 text-5xl font-extrabold uppercase tracking-wide">
-        <span className="text-white">Big</span> <span className="text-saffron">Bingo</span>
-      </h1>
-      <p className="mt-2 text-sm text-white/70">{t('tagline')}</p>
-
-      <div className="mt-8 w-full rounded-[2rem] bg-saffron p-5 text-ink shadow-xl">
-        <p className="text-sm font-semibold uppercase tracking-widest">{t('lobbyPrize')}</p>
-        {g ? <p className="text-5xl font-extrabold tabular-nums">{birr(g.prize)} <span className="text-xl">{t('birr')}</span></p> : <Sk className="mx-auto mt-1 h-12 w-48 !bg-black/10" />}
-      </div>
-
-      <button onClick={onPlay} className="mt-5 w-full rounded-full border-4 border-white/80 bg-called py-5 text-2xl font-extrabold shadow-xl active:scale-95">
-        {t('play10')}
-      </button>
-
-      <div className="mt-6 flex w-full justify-center gap-3 text-sm">
-        {g ? <>
-          <span className="rounded-full bg-white/10 px-4 py-2">{t('round')} <b className="tabular-nums">{g.round}</b></span>
-          <span className="rounded-full bg-white/10 px-4 py-2">{t('players')} <b className="tabular-nums">{g.taken.length}</b></span>
-        </> : <><Sk className="h-9 w-24 !rounded-full" /><Sk className="h-9 w-28 !rounded-full" /></>}
-      </div>
-
-      <button onClick={() => setRules((r) => !r)} aria-expanded={rules} className="mt-6 text-sm text-white/70 underline underline-offset-4">{t('rules')}</button>
-      {rules && g && <div className="w-full text-left"><Rules g={g} /></div>}
-      {!g && <Waking />}
-    </div>
+      </section>
+      {!rooms && <Waking />}
+    </>
   )
 }
 
@@ -280,7 +313,7 @@ const Pill = ({ label, value, hi }) => (
   </div>
 )
 
-// ---------- page 2: only the 600 numbers (no cartela here) ----------
+// ---------- page 2: only the numbers of this game (no cartela here) ----------
 function Pick({ g, me, toggle, now, onBack, onRefresh }) {
   const { t } = useL()
   const left = Math.max(0, Math.ceil((g.deadline - now) / 1000))
@@ -534,6 +567,7 @@ function Profile({ me }) {
       <section className="rounded-3xl bg-panel p-4">
         <h2 className="font-semibold">{t('inviteTitle')}</h2>
         <p className="mt-1 text-sm text-white/70">{t('inviteBody')}</p>
+        {me.inviteGoal > 0 && <p className="mt-2 font-semibold text-saffron">{me.refQualified % me.inviteGoal}/{me.inviteGoal} · {birr(me.inviteReward)} {t('birr')}</p>}
         <p className="mt-3 break-all rounded-xl bg-ink p-3 text-xs">{link}</p>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <button onClick={copy} className="rounded-2xl bg-line py-3 font-bold">{copied ? t('copied') : t('copy')}</button>
@@ -555,11 +589,13 @@ function Profile({ me }) {
 function Player() {
   const { t } = useL()
   const [tab, setTab] = useState('game')
-  const [view, setView] = useState('lobby') // lobby (Play 10) -> play (numbers, then bingo, then winner)
-  const [voice, setVoice] = useState(false)
+  const [view, setView] = useState('lobby') // lobby (Play 5 / Play 10) -> play (numbers, then bingo, then winner)
+  const [stake, setStake] = useState(null)
+  const [voice, setVoice] = useState(true)
   const [me, setMe] = useState(null)
   const now = useNow()
-  const { g, conn, err, toggle, reconnect } = useGame(voice)
+  const rooms = useRooms(tab === 'game' && view === 'lobby')
+  const { g, conn, err, toggle, reconnect } = useGame(voice, view === 'play' ? stake : null)
   const refresh = useCallback(() => api('/api/me').then(setMe).catch(() => {}), [])
 
   useEffect(() => {
@@ -573,7 +609,12 @@ function Player() {
   const toggleVoice = () => {
     const next = !voice
     setVoice(next)
-    if (next && 'speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance('Voice on'))
+    if (next) speak(16) // short sample, also unlocks sound on this phone
+  }
+  const play = (st) => {
+    unlockVoice() // this tap lets the phone play the Amharic calls later
+    setStake(st)
+    setView('play')
   }
   const toLobby = () => setView('lobby')
   const reload = () => {
@@ -583,10 +624,10 @@ function Player() {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col">
-      {!conn && <p role="status" className="mx-4 mt-3 rounded-xl bg-white/10 px-3 py-2 text-sm">{t('reconnecting')}</p>}
+      {view === 'play' && !conn && <p role="status" className="mx-4 mt-3 rounded-xl bg-white/10 px-3 py-2 text-sm">{t('reconnecting')}</p>}
       {err && <p role="alert" className="mx-4 mt-3 rounded-xl bg-rose px-3 py-2 text-sm font-semibold text-ink">{t('err_' + err, { max: g?.cfg.max })}</p>}
       <main className="flex-1 px-3 pb-24 pt-[max(1rem,env(safe-area-inset-top))]">
-        {tab === 'game' && (view === 'lobby' ? <Lobby g={g} onPlay={() => setView('play')} />
+        {tab === 'game' && (view === 'lobby' ? <Lobby rooms={rooms} onPlay={play} />
           : !g ? <GameSkeleton />
           : g.phase === 'pick' ? <Pick g={g} me={me} toggle={toggle} now={now} onBack={toLobby} onRefresh={reload} />
           : g.phase === 'run' ? <Bingo g={g} voice={voice} toggleVoice={toggleVoice} onLeave={toLobby} onRefresh={reload} />

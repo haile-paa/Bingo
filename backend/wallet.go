@@ -20,13 +20,14 @@ import (
 
 // All money is stored as integer santim (1 birr = 100).
 const (
-	entryFee      int64 = 1000   // one cartela = 10 birr
 	minDeposit    int64 = 5000
 	minWithdraw   int64 = 10000
 	signupBonus   int64 = 1000
-	referralBonus int64 = 1000
-	prizeFull     int64 = 500000 // 5000 birr when every cartela is sold
-	totalSpots          = 600
+	referralBonus int64 = 1000  // per invited friend whose first deposit is approved (set 0 to turn off)
+	inviteGoal    int64 = 20    // every 20 such friends ...
+	inviteReward  int64 = 15000 // ... pay 150 birr into the play wallet
+	payoutPercent int64 = 75 // players share 75% of the stakes, the company keeps 25%
+	totalSpots          = 200 // cartelas per room
 	minSpots            = 2  // fewest cartelas needed to start a round (testing; set back to 30 for production)
 	maxPerUser          = 2  // cartelas one person can hold per round
 )
@@ -36,6 +37,7 @@ var (
 	txnRe   = regexp.MustCompile(`(?i)transaction\s*(?:number|no\.?|id)\s*(?:is|:)?\s*([A-Z0-9]{8,14})`)
 	// the receipt link Telebirr sends: https://transactioninfo.ethiotelecom.et/receipt/DJU7HRHTVL
 	linkRe  = regexp.MustCompile(`(?i)transactioninfo\.ethiotelecom\.et/receipt/([A-Z0-9]{8,14})`)
+	bareRe  = regexp.MustCompile(`^[A-Z0-9]{8,14}$`) // just the transaction number, e.g. DJU7HRHTVL
 	phoneRe = regexp.MustCompile(`^0[79]\d{8}$`)
 )
 
@@ -46,6 +48,7 @@ type User struct {
 	Bonus      int64     `bson:"bonus"`
 	ReferredBy int64     `bson:"referredBy"`
 	RefPaid    bool      `bson:"refPaid"`
+	RefQualified int64   `bson:"refQualified"` // invited friends whose first deposit was approved
 	State      string    `bson:"state,omitempty"`
 	Phone      string    `bson:"phone,omitempty"`
 	GamesWon   int64     `bson:"gamesWon"`
@@ -141,56 +144,117 @@ func ensureUser(ctx context.Context, id int64, name string, ref int64) (bool, er
 	return res.UpsertedCount == 1, nil
 }
 
-// createDeposit takes what the user pasted - the full Telebirr SMS, or just the receipt link -
-// and queues it for admin review. declared is the amount the user typed in the previous step;
-// it is only used for a link, because a link does not contain the amount.
+// txnFrom finds the Telebirr transaction number in what the user pasted:
+// the full SMS, the receipt link, or the bare number.
+func txnFrom(text string) string {
+	if m := txnRe.FindStringSubmatch(text); m != nil {
+		return strings.ToUpper(m[1])
+	}
+	if m := linkRe.FindStringSubmatch(text); m != nil {
+		return strings.ToUpper(m[1])
+	}
+	if t := strings.ToUpper(strings.TrimSpace(text)); bareRe.MatchString(t) && strings.ContainsAny(t, "0123456789") {
+		return t
+	}
+	return ""
+}
+
+const (
+	msgBadDeposit = "መልዕክቱን ማንበብ አልተቻለም። የቴሌብር SMS ሙሉውን፣ የደረሰኝ ሊንኩን ወይም የትራንዛክሽን ቁጥሩን paste ያድርጉ።"
+	msgDupDeposit = "ይህ ትራንዛክሽን ቀድሞ ተልኳል።"
+)
+
+// createDeposit handles what the user pasted after choosing an amount.
+// With VERIFY_ET_API_KEY set the receipt is checked by Verify.ET and the money is credited at once.
+// Without it (or when Verify.ET is unreachable) the deposit waits for admin approval.
+// declared is the amount the user typed earlier; it is only a fallback for manual review.
 func createDeposit(ctx context.Context, uid int64, text string, declared int64) (string, bool) {
-	const bad = "መልዕክቱን ማንበብ አልተቻለም። የቴሌብር SMS ሙሉውን ወይም የደረሰኝ ሊንኩን paste ያድርጉ።"
 	if len(text) > 1000 {
-		return bad, false
+		return msgBadDeposit, false
 	}
-	am, tx := amtRe.FindStringSubmatch(text), txnRe.FindStringSubmatch(text)
-	var amount int64
-	stored := text
-	switch {
-	case am != nil && tx != nil: // full SMS
-		value, err := strconv.ParseFloat(strings.ReplaceAll(am[1], ",", ""), 64)
-		if err != nil {
-			return bad, false
-		}
-		amount = int64(math.Round(value * 100))
-	default: // receipt link (also works when the SMS text is pasted without its "transaction number" part)
-		m := linkRe.FindStringSubmatch(text)
-		if m == nil {
-			return bad, false
-		}
-		tx = m
-		stored = "https://transactioninfo.ethiotelecom.et/receipt/" + strings.ToUpper(m[1]) // the admin opens this to check it
-		amount = declared
-		if am != nil {
-			if v, err := strconv.ParseFloat(strings.ReplaceAll(am[1], ",", ""), 64); err == nil {
-				amount = int64(math.Round(v * 100))
-				stored = text
-			}
-		}
+	tx := txnFrom(text)
+	if tx == "" {
+		return msgBadDeposit, false
 	}
+	if n, err := db.Collection("deposits").CountDocuments(ctx, bson.M{"txnId": tx}); err == nil && n > 0 {
+		return msgDupDeposit, false
+	}
+	if cfg.VerifyETKey != "" {
+		res := verifyTelebirr(ctx, uid, tx)
+		switch res.Outcome {
+		case verifyOK:
+			return autoDeposit(ctx, uid, text, tx, declared, res.Item)
+		case verifyInvalid:
+			return res.Message, false
+		case verifyBusy:
+			return "እባክዎ ጥቂት ሰከንዶች ቆይተው እንደገና ይሞክሩ።", false
+		}
+		// verifyDown: fall through to manual review
+	}
+	return queueDeposit(ctx, uid, text, tx, declared)
+}
+
+// storedText is what the admin sees: the SMS, or the receipt link when only a link/number was sent.
+func storedText(text, tx string) string {
+	if amtRe.MatchString(text) {
+		return text
+	}
+	return "https://transactioninfo.ethiotelecom.et/receipt/" + tx
+}
+
+// autoDeposit credits a receipt that Verify.ET confirmed. The amount comes from Verify.ET, not from the user.
+func autoDeposit(ctx context.Context, uid int64, text, tx string, declared int64, it *verifyItem) (string, bool) {
+	amount := int64(math.Round(float64(it.Amount) * 100))
 	if amount < minDeposit {
-		return "ዝቅተኛው ገቢ " + birr(minDeposit) + " ብር ነው። ወይም መጠኑ አልታወቀም፤ ከ«ገንዘብ አስገባ» እንደገና ይጀምሩ።", false
+		return "ዝቅተኛው ገቢ " + birr(minDeposit) + " ብር ነው።", false
 	}
-	tail := cfg.TelebirrNumber[max(0, len(cfg.TelebirrNumber)-4):]
-	name := strings.ToLower(cfg.TelebirrName)
-	name = name[:min(6, len(name))]
-	low := strings.ToLower(text)
-	okRecv := (tail != "" && strings.Contains(text, tail)) || (name != "" && strings.Contains(low, name))
-	d := Deposit{UID: uid, Amount: amount, TxnID: strings.ToUpper(tx[1]), SMS: stored, ReceiverOK: okRecv, Status: "pending", CreatedAt: time.Now()}
-	if _, err := db.Collection("deposits").InsertOne(ctx, d); err != nil {
+	switch it.receiverCheck() {
+	case recvWrong:
+		return "ይህ ክፍያ ወደ ሌላ አካውንት ነው የተላከው። ክፍያው ወደ " + cfg.TelebirrNumber + " መሆን አለበት።", false
+	case recvUnknown:
+		return queueDeposit(ctx, uid, text, tx, declared)
+	}
+	d := Deposit{UID: uid, Amount: amount, TxnID: tx, SMS: storedText(text, tx), ReceiverOK: true, Status: "pending", CreatedAt: time.Now()}
+	res, err := db.Collection("deposits").InsertOne(ctx, d)
+	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
-			return "ይህ ትራንዛክሽን ቀድሞ ተልኳል።", false
+			return msgDupDeposit, false
 		}
 		log.Println("deposit:", err)
 		return "ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።", false
 	}
-	return "✅ " + birr(amount) + " ብር ተቀብለናል (ref " + d.TxnID + ")። አድሚን በቅርቡ ያረጋግጣል።", true
+	id, _ := res.InsertedID.(primitive.ObjectID)
+	if err := approveDeposit(ctx, id); err != nil {
+		log.Println("auto approve:", err)
+		return "✅ " + birr(amount) + " ብር ተቀብለናል (ref " + tx + ")። አድሚን በቅርቡ ያረጋግጣል።", true
+	}
+	return "✅ " + birr(amount) + " ብር ተረጋግጦ ወደ ሂሳብዎ ገብቷል (ref " + tx + ")።", true
+}
+
+// queueDeposit saves the deposit for the admin to approve by hand.
+func queueDeposit(ctx context.Context, uid int64, text, tx string, declared int64) (string, bool) {
+	amount := declared
+	if am := amtRe.FindStringSubmatch(text); am != nil {
+		if v, err := strconv.ParseFloat(strings.ReplaceAll(am[1], ",", ""), 64); err == nil {
+			amount = int64(math.Round(v * 100))
+		}
+	}
+	if amount < minDeposit {
+		return "ዝቅተኛው ገቢ " + birr(minDeposit) + " ብር ነው። መጠኑ አልታወቀም፤ ከ«ገንዘብ አስገባ» እንደገና ይጀምሩ።", false
+	}
+	tail := cfg.TelebirrNumber[max(0, len(cfg.TelebirrNumber)-4):]
+	name := strings.ToLower(cfg.TelebirrName)
+	name = name[:min(6, len(name))]
+	okRecv := (tail != "" && strings.Contains(text, tail)) || (name != "" && strings.Contains(strings.ToLower(text), name))
+	d := Deposit{UID: uid, Amount: amount, TxnID: tx, SMS: storedText(text, tx), ReceiverOK: okRecv, Status: "pending", CreatedAt: time.Now()}
+	if _, err := db.Collection("deposits").InsertOne(ctx, d); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return msgDupDeposit, false
+		}
+		log.Println("deposit:", err)
+		return "ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።", false
+	}
+	return "✅ " + birr(amount) + " ብር ተቀብለናል (ref " + tx + ")። አድሚን በቅርቡ ያረጋግጣል።", true
 }
 
 func payReferrer(ctx context.Context, uid int64) {
@@ -201,12 +265,30 @@ func payReferrer(ctx context.Context, uid int64) {
 	if err != nil {
 		return
 	}
-	if err := credit(ctx, u.ReferredBy, "bonus", referralBonus); err != nil {
-		log.Println("referral:", err)
+	if referralBonus > 0 {
+		if err := credit(ctx, u.ReferredBy, "bonus", referralBonus); err != nil {
+			log.Println("referral:", err)
+		} else {
+			addTx(ctx, u.ReferredBy, "referral", referralBonus, strconv.FormatInt(uid, 10))
+			go notify(u.ReferredBy, "🎁 የጋበዙት ጓደኛ የመጀመሪያ ገቢ አድርጓል። +"+birr(referralBonus)+" ብር ተጨምሯል!")
+		}
+	}
+	// goal: every inviteGoal friends -> inviteReward. $inc returns the new count atomically, so a goal can't pay twice.
+	var ref User
+	if err := db.Collection("users").FindOneAndUpdate(ctx, bson.M{"_id": u.ReferredBy},
+		bson.M{"$inc": bson.M{"refQualified": 1}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&ref); err != nil {
+		log.Println("referral count:", err)
 		return
 	}
-	addTx(ctx, u.ReferredBy, "referral", referralBonus, strconv.FormatInt(uid, 10))
-	go notify(u.ReferredBy, "🎁 የጋበዙት ጓደኛ የመጀመሪያ ገቢ አድርጓል። +"+birr(referralBonus)+" ብር ተጨምሯል!")
+	if ref.RefQualified%inviteGoal == 0 {
+		if err := credit(ctx, u.ReferredBy, "bonus", inviteReward); err != nil {
+			log.Println("invite goal:", err)
+			return
+		}
+		addTx(ctx, u.ReferredBy, "referral", inviteReward, "goal"+strconv.FormatInt(ref.RefQualified, 10))
+		go notify(u.ReferredBy, "🎉 "+strconv.FormatInt(inviteGoal, 10)+" ጓደኞች ጋብዘዋል! +"+birr(inviteReward)+" ብር ወደ የጨዋታ ዋሌትዎ ተጨምሯል።")
+	}
 }
 
 func approveDeposit(ctx context.Context, id primitive.ObjectID) error {
@@ -247,7 +329,7 @@ func meHandler(c *gin.Context) {
 	}
 	refs, _ := db.Collection("users").CountDocuments(ctx, bson.M{"referredBy": uid})
 	c.JSON(200, gin.H{"id": u.ID, "name": u.Name, "balance": u.Balance, "bonus": u.Bonus,
-		"referrals": refs, "bot": cfg.BotUsername, "minWithdraw": minWithdraw, "phone": u.Phone,
+		"referrals": refs, "refQualified": u.RefQualified, "inviteGoal": inviteGoal, "inviteReward": inviteReward, "bot": cfg.BotUsername, "minWithdraw": minWithdraw, "phone": u.Phone,
 		"gamesWon": u.GamesWon, "earned": u.Earned, "telebirr": cfg.TelebirrNumber, "telebirrName": cfg.TelebirrName})
 }
 
@@ -314,7 +396,7 @@ func statsHandler(c *gin.Context) {
 	users, _ := db.Collection("users").EstimatedDocumentCount(ctx)
 	pd, _ := db.Collection("deposits").CountDocuments(ctx, bson.M{"status": "pending"})
 	pw, _ := db.Collection("withdrawals").CountDocuments(ctx, bson.M{"status": "pending"})
-	c.JSON(200, gin.H{"users": users, "pendingDeposits": pd, "pendingWithdrawals": pw, "online": game.online()})
+	c.JSON(200, gin.H{"users": users, "pendingDeposits": pd, "pendingWithdrawals": pw, "online": onlineTotal()})
 }
 
 func listHandler(coll string) gin.HandlerFunc {
@@ -436,16 +518,16 @@ func registerPhone(ctx context.Context, uid int64, raw string) string {
 }
 
 // refundSpot returns a cartela's price to the wallet it was paid from.
-func refundSpot(ctx context.Context, s Spot, n int) {
+func refundSpot(ctx context.Context, s Spot, n int, fee int64) {
 	field := "balance"
 	if s.Bonus {
 		field = "bonus"
 	}
-	if err := credit(ctx, s.UID, field, entryFee); err != nil {
+	if err := credit(ctx, s.UID, field, fee); err != nil {
 		log.Println("REFUND FAILED", s.UID, n, err)
 		return
 	}
-	addTx(ctx, s.UID, "refund", entryFee, strconv.Itoa(n))
+	addTx(ctx, s.UID, "refund", fee, strconv.Itoa(n))
 }
 
 func payWinner(ctx context.Context, uid, amt, round int64) error {

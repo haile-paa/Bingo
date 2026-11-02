@@ -24,14 +24,13 @@ import (
 
 type Config struct {
 	MongoURI, BotToken, BotUsername, WebhookSecret string
-	AdminKey, MiniAppURL, TelebirrNumber, Port, TelebirrName, SupportUser string
+	AdminKey, MiniAppURL, TelebirrNumber, Port, TelebirrName, SupportUser, VerifyETKey string
 	Dev                                            bool
 }
 
 var (
 	cfg  Config
 	db   *mongo.Database
-	game *Game
 )
 
 func env(key, def string) string {
@@ -127,7 +126,7 @@ func main() {
 		MongoURI: env("MONGO_URI", "mongodb://localhost:27017"), BotToken: os.Getenv("BOT_TOKEN"),
 		BotUsername: os.Getenv("BOT_USERNAME"), WebhookSecret: os.Getenv("WEBHOOK_SECRET"),
 		AdminKey: os.Getenv("ADMIN_KEY"), MiniAppURL: os.Getenv("MINIAPP_URL"),
-		TelebirrNumber: env("TELEBIRR_NUMBER", "0975081362"), TelebirrName: env("TELEBIRR_NAME", "Haileyesusi"), SupportUser: os.Getenv("SUPPORT_USER"), Port: env("PORT", "8080"), Dev: os.Getenv("DEV") == "1",
+		TelebirrNumber: env("TELEBIRR_NUMBER", "0975081362"), TelebirrName: env("TELEBIRR_NAME", "Haileyesusi"), SupportUser: os.Getenv("SUPPORT_USER"), VerifyETKey: os.Getenv("VERIFY_ET_API_KEY"), Port: env("PORT", "8080"), Dev: os.Getenv("DEV") == "1",
 	}
 	if cfg.BotToken == "" || cfg.WebhookSecret == "" {
 		log.Fatal("BOT_TOKEN and WEBHOOK_SECRET are required")
@@ -141,14 +140,14 @@ func main() {
 	db = client.Database("bingo")
 	ensureIndexes(ctx)
 
-	game = newGame()
-	go game.run()
+	startGames()
 	go setupBotMenu()
 
 	r := gin.Default()
 	r.Use(cors) // lets a separately hosted frontend (FRONTEND_ORIGIN) call this API
 	r.GET("/health", func(c *gin.Context) { c.String(200, "ok") }) // ping this to keep the server awake
 	r.GET("/ws", wsHandler)
+	r.GET("/api/rooms", roomsHandler)
 	r.POST("/bot/:secret", botWebhook)
 
 	api := r.Group("/api", userAuth())
@@ -164,6 +163,7 @@ func main() {
 	adm.POST("/withdrawals/:id/:action", withdrawalAction)
 
 	r.Static("/assets", "../frontend/dist/assets")
+	r.Static("/voice", "../frontend/dist/voice") // Amharic number calls (mp3)
 	r.NoRoute(func(c *gin.Context) { c.File("../frontend/dist/index.html") })
 	log.Fatal(r.Run(":" + cfg.Port))
 }
