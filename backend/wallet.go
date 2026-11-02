@@ -20,15 +20,16 @@ import (
 
 // All money is stored as integer santim (1 birr = 100).
 const (
-	minDeposit    int64 = 5000
+	minDeposit    int64 = 1000
 	minWithdraw   int64 = 10000
 	signupBonus   int64 = 1000
+	refMinDeposit int64 = 1000  // an invited friend counts only after a first deposit of at least 10 birr (stops fake-account farming)
 	referralBonus int64 = 1000  // per invited friend whose first deposit is approved (set 0 to turn off)
 	inviteGoal    int64 = 20    // every 20 such friends ...
 	inviteReward  int64 = 15000 // ... pay 150 birr into the play wallet
-	payoutPercent int64 = 80 // players share 80% of the stakes, the company keeps 20%
+	payoutPercent int64 = 85 // players share 85% of the stakes, the company keeps 15%
 	totalSpots          = 300 // cartelas per room
-	minSpots            = 2  // fewest cartelas needed to start a round (testing; set back to 30 for production)
+	minSpots            = 20 // fewest cartelas needed to start a round
 	maxPerUser          = 2  // cartelas one person can hold per round
 )
 
@@ -95,6 +96,7 @@ func ensureIndexes(ctx context.Context) {
 	add("deposits", byStatus, nil)
 	add("withdrawals", byStatus, nil)
 	add("txs", bson.D{{Key: "uid", Value: 1}, {Key: "at", Value: -1}}, nil)
+	add("cashback", bson.D{{Key: "uid", Value: 1}, {Key: "week", Value: 1}}, options.Index().SetUnique(true))
 	add("users", bson.D{{Key: "referredBy", Value: 1}}, nil)
 	add("users", bson.D{{Key: "phone", Value: 1}}, options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"phone": bson.M{"$exists": true}}))
 }
@@ -165,8 +167,8 @@ const (
 )
 
 // createDeposit handles what the user pasted after choosing an amount.
-// With VERIFY_ET_API_KEY set the receipt is checked by Verify.ET and the money is credited at once.
-// Without it (or when Verify.ET is unreachable) the deposit waits for admin approval.
+// With VERIFY_ET_API_KEY set the receipt is checked by Verify.ET and credited at once;
+// otherwise (or when Verify.ET is unavailable) the deposit waits for admin approval.
 // declared is the amount the user typed earlier; it is only a fallback for manual review.
 func createDeposit(ctx context.Context, uid int64, text string, declared int64) (string, bool) {
 	if len(text) > 1000 {
@@ -179,6 +181,9 @@ func createDeposit(ctx context.Context, uid int64, text string, declared int64) 
 	if n, err := db.Collection("deposits").CountDocuments(ctx, bson.M{"txnId": tx}); err == nil && n > 0 {
 		return msgDupDeposit, false
 	}
+	if !rl.allow("dep:"+strconv.FormatInt(uid, 10), 15, time.Hour) {
+		return "ብዙ ሙከራ አድርገዋል። ከጥቂት ጊዜ በኋላ እንደገና ይሞክሩ።", false
+	}
 	if cfg.VerifyETKey != "" {
 		res := verifyTelebirr(ctx, uid, tx)
 		switch res.Outcome {
@@ -189,7 +194,7 @@ func createDeposit(ctx context.Context, uid int64, text string, declared int64) 
 		case verifyBusy:
 			return "እባክዎ ጥቂት ሰከንዶች ቆይተው እንደገና ይሞክሩ።", false
 		}
-		// verifyDown: fall through to manual review
+		// verifyDown (Verify.ET unreachable, out of credits, still queued): the admin decides by hand
 	}
 	return queueDeposit(ctx, uid, text, tx, declared)
 }
@@ -202,6 +207,9 @@ func storedText(text, tx string) string {
 	return "https://transactioninfo.ethiotelecom.et/receipt/" + tx
 }
 
+// maxReceiptAge: a receipt older than this is not accepted automatically.
+const maxReceiptAge = 24 * time.Hour
+
 // autoDeposit credits a receipt that Verify.ET confirmed. The amount comes from Verify.ET, not from the user.
 func autoDeposit(ctx context.Context, uid int64, text, tx string, declared int64, it *verifyItem) (string, bool) {
 	amount := int64(math.Round(float64(it.Amount) * 100))
@@ -212,7 +220,13 @@ func autoDeposit(ctx context.Context, uid int64, text, tx string, declared int64
 	case recvWrong:
 		return "ይህ ክፍያ ወደ ሌላ አካውንት ነው የተላከው። ክፍያው ወደ " + cfg.TelebirrNumber + " መሆን አለበት።", false
 	case recvUnknown:
-		return queueDeposit(ctx, uid, text, tx, declared)
+		return queueDeposit(ctx, uid, text, tx, declared) // cannot read the receiver: the admin decides
+	}
+	if ts, err := time.Parse(time.RFC3339, it.Timestamp); err == nil && time.Since(ts) > maxReceiptAge {
+		return "ይህ ትራንዛክሽን ከ24 ሰዓት በላይ ሆኖታል። ድጋፍን ያነጋግሩ።", false
+	}
+	if it.History != nil && it.History.ConfirmedBefore {
+		return queueDeposit(ctx, uid, text, tx, declared) // this receipt was already checked by someone else: the admin decides
 	}
 	d := Deposit{UID: uid, Amount: amount, TxnID: tx, SMS: storedText(text, tx), ReceiverOK: true, Status: "pending", CreatedAt: time.Now()}
 	res, err := db.Collection("deposits").InsertOne(ctx, d)
@@ -228,7 +242,7 @@ func autoDeposit(ctx context.Context, uid int64, text, tx string, declared int64
 		log.Println("auto approve:", err)
 		return "✅ " + birr(amount) + " ብር ተቀብለናል (ref " + tx + ")። አድሚን በቅርቡ ያረጋግጣል።", true
 	}
-	return "✅ " + birr(amount) + " ብር ተረጋግጦ ወደ ሂሳብዎ ገብቷል (ref " + tx + ")።", true
+	return "✅ " + birr(amount) + " ብር ተረጋግጦ ወደ የጨዋታ ዋሌትዎ ገብቷል (ref " + tx + ")።", true
 }
 
 // queueDeposit saves the deposit for the admin to approve by hand.
@@ -257,7 +271,10 @@ func queueDeposit(ctx context.Context, uid int64, text, tx string, declared int6
 	return "✅ " + birr(amount) + " ብር ተቀብለናል (ref " + tx + ")። አድሚን በቅርቡ ያረጋግጣል።", true
 }
 
-func payReferrer(ctx context.Context, uid int64) {
+func payReferrer(ctx context.Context, uid, deposit int64) {
+	if deposit < refMinDeposit {
+		return // too small to count; a later first-size deposit still can
+	}
 	var u User
 	err := db.Collection("users").FindOneAndUpdate(ctx,
 		bson.M{"_id": uid, "refPaid": false, "referredBy": bson.M{"$gt": 0}},
@@ -299,13 +316,15 @@ func approveDeposit(ctx context.Context, id primitive.ObjectID) error {
 	if err != nil {
 		return err
 	}
-	if err := credit(ctx, d.UID, "balance", d.Amount); err != nil {
+	// deposits go to the play wallet (bets only, never withdrawable); only prizes reach the main wallet
+	if err := credit(ctx, d.UID, "bonus", d.Amount); err != nil {
 		deposits.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"status": "pending"}})
 		return err
 	}
 	addTx(ctx, d.UID, "deposit", d.Amount, d.TxnID)
+	cbInc(ctx, d.UID, "deposited", d.Amount)
 	go notify(d.UID, "✅ የ"+birr(d.Amount)+" ብር ገቢዎ ጸድቋል።")
-	payReferrer(ctx, d.UID)
+	payReferrer(ctx, d.UID, d.Amount)
 	return nil
 }
 
@@ -330,7 +349,8 @@ func meHandler(c *gin.Context) {
 	refs, _ := db.Collection("users").CountDocuments(ctx, bson.M{"referredBy": uid})
 	c.JSON(200, gin.H{"id": u.ID, "name": u.Name, "balance": u.Balance, "bonus": u.Bonus,
 		"referrals": refs, "refQualified": u.RefQualified, "inviteGoal": inviteGoal, "inviteReward": inviteReward, "bot": cfg.BotUsername, "minWithdraw": minWithdraw, "phone": u.Phone,
-		"gamesWon": u.GamesWon, "earned": u.Earned, "telebirr": cfg.TelebirrNumber, "telebirrName": cfg.TelebirrName})
+		"gamesWon": u.GamesWon, "earned": u.Earned, "telebirr": cfg.TelebirrNumber, "telebirrName": cfg.TelebirrName,
+		"cashback": cashbackInfo(ctx, uid)})
 }
 
 func txsHandler(c *gin.Context) {
@@ -351,6 +371,9 @@ func txsHandler(c *gin.Context) {
 
 // withdrawTo holds the money and queues the request for an admin: "ok", "funds" or "err".
 func withdrawTo(ctx context.Context, uid int64, phone string, amount int64) string {
+	if n, err := db.Collection("withdrawals").CountDocuments(ctx, bson.M{"uid": uid, "status": "pending"}); err != nil || n >= 3 {
+		return "limit" // at most 3 open requests per person
+	}
 	res, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid, "balance": bson.M{"$gte": amount}},
 		bson.M{"$inc": bson.M{"balance": -amount}})
 	if err != nil {
@@ -373,6 +396,15 @@ func withdrawHandler(c *gin.Context) {
 		Amount int64  `json:"amount"`
 		Phone  string `json:"phone"`
 	}
+	uid := c.GetInt64("uid")
+	if !rl.allow("wd:"+strconv.FormatInt(uid, 10), 5, time.Hour) {
+		c.JSON(429, gin.H{"error": "Too many requests. Try again later."})
+		return
+	}
+	if u, err := loadUser(c.Request.Context(), uid); err != nil || (u.Phone == "" && !cfg.Dev) {
+		c.JSON(403, gin.H{"error": "Please register in the bot first."})
+		return
+	}
 	phone := ""
 	if err := c.ShouldBindJSON(&in); err == nil {
 		phone = normPhone(in.Phone)
@@ -381,9 +413,11 @@ func withdrawHandler(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Enter a valid Telebirr phone number and an amount of at least " + birr(minWithdraw) + " birr."})
 		return
 	}
-	switch withdrawTo(c.Request.Context(), c.GetInt64("uid"), phone, in.Amount*100) {
+	switch withdrawTo(c.Request.Context(), uid, phone, in.Amount*100) {
 	case "ok":
 		c.JSON(200, gin.H{"ok": true})
+	case "limit":
+		c.JSON(429, gin.H{"error": "You already have open withdrawal requests. Wait until they are paid."})
 	case "funds":
 		c.JSON(402, gin.H{"error": "Not enough withdrawable balance. Bonus money can only be used to play."})
 	default:
@@ -528,6 +562,7 @@ func refundSpot(ctx context.Context, s Spot, n int, fee int64) {
 		return
 	}
 	addTx(ctx, s.UID, "refund", fee, strconv.Itoa(n))
+	cbInc(ctx, s.UID, "wagered", -fee) // a given-back stake was not played
 }
 
 func payWinner(ctx context.Context, uid, amt, round int64) error {

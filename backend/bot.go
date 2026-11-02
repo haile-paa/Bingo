@@ -55,7 +55,7 @@ func tg(method string, payload any) {
 	}
 	resp, err := httpc.Post("https://api.telegram.org/bot"+cfg.BotToken+"/"+method, "application/json", bytes.NewReader(b))
 	if err != nil {
-		log.Println("tg:", err)
+		log.Println("tg:", strings.ReplaceAll(err.Error(), cfg.BotToken, "<token>")) // the error text contains the bot token URL
 		return
 	}
 	resp.Body.Close()
@@ -138,7 +138,7 @@ func setState(ctx context.Context, uid int64, state string) {
 }
 
 func botWebhook(c *gin.Context) {
-	if c.Param("secret") != cfg.WebhookSecret {
+	if !sameSecret(c.Param("secret"), cfg.WebhookSecret) {
 		c.Status(404)
 		return
 	}
@@ -152,6 +152,20 @@ func botWebhook(c *gin.Context) {
 }
 
 func handleUpdate(up Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("bot panic:", r)
+		}
+	}()
+	var from int64
+	if up.Callback != nil {
+		from = up.Callback.From.ID
+	} else if up.Message != nil {
+		from = up.Message.From.ID
+	}
+	if from != 0 && !rl.allow("bot:"+strconv.FormatInt(from, 10), 25, time.Minute) {
+		return // flooding: ignore
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if up.Callback != nil {
@@ -285,6 +299,8 @@ func onMessage(ctx context.Context, m *Message) {
 		case "ok":
 			setState(ctx, uid, "")
 			sendMenu(uid, "✅ ጥያቄዎ ተልኳል። አድሚን በቴሌብር ይልካል።")
+		case "limit":
+			sendText(uid, "ቀድሞ የላኩት ጥያቄ እስኪጠናቀቅ ይጠብቁ።", nil)
 		case "funds":
 			sendText(uid, "በቂ የሚወጣ ሂሳብ የለዎትም። የጨዋታ ዋሌት ለመጫወት ብቻ ነው።", nil)
 		default:
@@ -333,7 +349,7 @@ func runAction(ctx context.Context, from tgUser, data string) {
 		sendText(uid, "🤑 ማውጣት የሚፈልጉትን መጠን (ብር) ያስገቡ። ዝቅተኛው "+birr(minWithdraw)+" ብር ነው።\nየሚወጣ ሂሳብ፦ "+birr(u.Balance)+" ብር\nገንዘቡ ወደ "+u.Phone+" በቴሌብር ይላካል።", nil)
 	case "inv":
 		link := "https://t.me/" + cfg.BotUsername + "?start=ref_" + strconv.FormatInt(uid, 10)
-		sendMenu(uid, "🎁 ጓደኞችዎን ይጋብዙ፦\n"+link+"\n\nጓደኛዎ ሲመዘገብ "+birr(signupBonus)+" ብር ያገኛል። የመጀመሪያ ገቢው ሲጸድቅ እርስዎ "+birr(referralBonus)+" ብር ያገኛሉ።\n\n🎉 ገቢ ያደረጉ "+strconv.FormatInt(inviteGoal, 10)+" ጓደኞች ሲጋብዙ "+birr(inviteReward)+" ብር ያገኛሉ። (አሁን፦ "+strconv.FormatInt(u.RefQualified%inviteGoal, 10)+"/"+strconv.FormatInt(inviteGoal, 10)+")")
+		sendMenu(uid, "🎁 ጓደኞችዎን ይጋብዙ፦\n"+link+"\n\nጓደኛዎ ሲመዘገብ "+birr(signupBonus)+" ብር ያገኛል። ቢያንስ "+birr(refMinDeposit)+" ብር የመጀመሪያ ገቢ ሲያደርግ እርስዎ "+birr(referralBonus)+" ብር ያገኛሉ።\n\n🎉 ገቢ ያደረጉ "+strconv.FormatInt(inviteGoal, 10)+" ጓደኞች ሲጋብዙ "+birr(inviteReward)+" ብር ያገኛሉ። (አሁን፦ "+strconv.FormatInt(u.RefQualified%inviteGoal, 10)+"/"+strconv.FormatInt(inviteGoal, 10)+")")
 	case "sup":
 		if cfg.SupportUser == "" {
 			sendMenu(uid, "ድጋፍ በቅርቡ ይጨመራል።")

@@ -100,6 +100,10 @@ func userAuth() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
+		if !rl.allow("api:"+strconv.FormatInt(id, 10), 60, time.Minute) {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please wait a moment."})
+			return
+		}
 		if _, err := ensureUser(c.Request.Context(), id, name, 0); err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "server error"})
 			return
@@ -113,6 +117,7 @@ func adminAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		got := []byte(c.GetHeader("X-Admin-Key"))
 		if cfg.AdminKey == "" || subtle.ConstantTimeCompare(got, []byte(cfg.AdminKey)) != 1 {
+			time.Sleep(400 * time.Millisecond) // slows down key guessing
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
@@ -131,9 +136,24 @@ func main() {
 	if cfg.BotToken == "" || cfg.WebhookSecret == "" {
 		log.Fatal("BOT_TOKEN and WEBHOOK_SECRET are required")
 	}
+	onRender := os.Getenv("RENDER") != ""
+	if cfg.Dev && onRender {
+		log.Fatal("DEV=1 must never be set on Render: it lets anybody log in as any user")
+	}
+	if onRender && os.Getenv("MONGO_URI") == "" {
+		log.Fatal("MONGO_URI is required in production")
+	}
+	if cfg.Dev {
+		log.Println("WARNING: DEV mode is ON (local testing only)")
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	if len(cfg.AdminKey) < 24 {
+		log.Println("WARNING: ADMIN_KEY is missing or shorter than 24 characters - use a long random key (e.g. 40 random characters)")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.MongoURI))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.MongoURI).SetMaxPoolSize(50).SetServerSelectionTimeout(10*time.Second))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -141,10 +161,12 @@ func main() {
 	ensureIndexes(ctx)
 
 	startGames()
+	go startCashback()
 	go setupBotMenu()
 
-	r := gin.Default()
-	r.Use(cors) // lets a separately hosted frontend (FRONTEND_ORIGIN) call this API
+	r := gin.New()
+	r.SetTrustedProxies(nil)
+	r.Use(gin.Recovery(), accessLog(), securityHeaders(), bodyLimit(64<<10), cors) // lets a separately hosted frontend (FRONTEND_ORIGIN) call this API
 	r.GET("/health", func(c *gin.Context) { c.String(200, "ok") }) // ping this to keep the server awake
 	r.GET("/ws", wsHandler)
 	r.GET("/api/rooms", roomsHandler)
@@ -164,7 +186,9 @@ func main() {
 
 	r.Static("/assets", "../frontend/dist/assets")
 	r.NoRoute(func(c *gin.Context) { c.File("../frontend/dist/index.html") })
-	log.Fatal(r.Run(":" + cfg.Port))
+	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r, ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 16 << 10}
+	log.Fatal(srv.ListenAndServe())
 }
 
 // loadDotEnv reads KEY=VALUE lines from a .env file. Real environment variables take priority.

@@ -32,21 +32,22 @@ const DICT = {
     err_funds: 'በቂ ሂሳብ የለዎትም። በቦቱ ውስጥ ገንዘብ ያስገቡ።',
     err_register: 'መጀመሪያ በቦቱ ውስጥ «ተመዝገብ» ን ተጭነው ይመዝገቡ።',
     err_limit: 'አንድ ሰው እስከ {max} ካርቴላ ብቻ መያዝ ይችላል።', err_server: 'ችግር ተፈጥሯል። እንደገና ይሞክሩ።',
+    cbTitle: 'ሳምንታዊ ካሽባክ {pct}%', cbDeposit: 'በዚህ ሳምንት ያስገቡት', cbLost: 'ያጡት ገንዘብ', cbSoFar: 'እስካሁን የሚያገኙት', cbDays: 'ሰኞ ይከፈላል · {n} ቀን ይቀራል', cbNote: 'የተሸነፈ ገንዘብ ብቻ ይቆጠራል። ያሸነፈ ገንዘብ ከካሽባክ ይወጣል።',
     depositTitle: 'ገንዘብ ማስገባት',
-    depositBody: 'ማስገባት በቦቱ ውስጥ ብቻ ነው። «ገንዘብ አስገባ» ን ተጭነው ከ50 ብር ጀምሮ በቴሌብር ይላኩ፣ ከዚያ የደረሰዎትን SMS ወይም የደረሰኝ ሊንክ ለቦቱ ይላኩ።',
+    depositBody: 'ማስገባት በቦቱ ውስጥ ብቻ ነው። «ገንዘብ አስገባ» ን ተጭነው ከ10 ብር ጀምሮ በቴሌብር ይላኩ፣ ከዚያ የደረሰዎትን SMS ወይም የደረሰኝ ሊንክ ለቦቱ ይላኩ።',
     toBot: 'ወደ ቦቱ ሂድ', withdrawTitle: 'ገንዘብ ማውጣት', tele: 'የቴሌብር ስልክ ቁጥር',
     amount: 'መጠን (ብር፣ ዝቅተኛ {min})', send: 'ጥያቄ ላክ', sent: 'ጥያቄዎ ተልኳል። አድሚን በቴሌብር ይልካል።',
     withdrawable: 'የሚወጣ', playOnly: 'ለጨዋታ ብቻ', noTx: 'እስካሁን እንቅስቃሴ የለም።',
     wins: 'ያሸነፉ ጨዋታዎች', invites: 'የጋበዟቸው', earned: 'ጠቅላላ ገቢ', language: 'ቋንቋ',
-    inviteTitle: 'ጓደኞችን ይጋብዙ', inviteBody: 'ጓደኛዎ ሲመዘገብ 10 ብር ያገኛል። የመጀመሪያ ገቢው ሲጸድቅ እርስዎ 10 ብር ያገኛሉ። ገቢ ያደረጉ 20 ጓደኞች ሲጋብዙ 150 ብር ያገኛሉ።',
-    copy: 'ኮፒ', copied: 'ተቀድቷል', shareBtn: 'አጋራ', shareText: 'ከእኔ ጋር Bingo ይጫወቱ! ሲመዘገቡ 10 ብር ያገኛሉ።',
+    inviteTitle: 'ጓደኞችን ይጋብዙ', inviteBody: 'ጓደኛዎ ሲመዘገብ 10 ብር ያገኛል። ጓደኛዎ ቢያንስ 50 ብር ሲያስገባ እርስዎ 10 ብር ያገኛሉ። ገቢ ያደረጉ 20 ጓደኞች ሲጋብዙ 150 ብር ያገኛሉ።',
+    copy: 'ኮፒ', copied: 'ተቀድቷል', shareBtn: 'አጋራ', shareText: 'ከእኔ ጋር Big Bingo ይጫወቱ! 20 ሰው ይጋብዙ እና 150 ብር ያግኙ! 🎁',
     connecting: 'ከጨዋታው ጋር በመገናኘት ላይ…', reconnecting: 'እንደገና በመገናኘት ላይ…', loading: 'በመጫን ላይ…',
     waking: 'ሰርቨሩ እየተነሳ ነው… እስከ 1 ደቂቃ ሊወስድ ይችላል', tagline: 'ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!', welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10', play5: 'ተጫወት 5', statPct: 'ለአሸናፊ የሚከፈል', statSpots: 'ቦታ በአንድ ጨዋታ', statSold: 'አሁን የተያዙ ካርቴላዎች', prizeNow: 'ደራሽ',
     players: 'ተጫዋቾች', gameId: 'የጨዋታ ቁጥር', bet: 'ውርርድ', derash: 'ደራሽ', stake: 'ዋጋ',
     back: 'ተመለስ', refresh: 'አድስ', leave: 'ውጣ', auto: 'አውቶማቲክ',
     lobbyRound: 'አሁን ያለው ዙር', lobbyPlayers: 'የተመዘገቡ ተጫዋቾች', lobbyPrize: 'አሁን ያለው ደራሽ',
     k_signup_bonus: 'የምዝገባ ስጦታ', k_deposit: 'ገቢ', k_referral: 'የግብዣ ሽልማት', k_entry: 'የካርቴላ ክፍያ',
-    k_win: 'ሽልማት', k_withdraw: 'ወጪ', k_refund: 'ተመላሽ',
+    k_win: 'ሽልማት', k_cashback: 'ሳምንታዊ ካሽባክ', k_withdraw: 'ወጪ', k_refund: 'ተመላሽ',
   },
   en: {
     game: 'Game', history: 'History', wallet: 'Wallet', profile: 'Profile',
@@ -69,21 +70,22 @@ const DICT = {
     err_funds: 'Not enough balance. Deposit in the bot.',
     err_register: 'Register in the bot first (tap Register).',
     err_limit: 'You can hold at most {max} cartelas.', err_server: 'Something went wrong. Try again.',
+    cbTitle: 'Weekly cashback {pct}%', cbDeposit: 'Deposited this week', cbLost: 'Money lost', cbSoFar: 'Cashback so far', cbDays: 'Paid Monday · {n} d left', cbNote: 'Only money you lose counts. Money that wins a prize is removed from the cashback.',
     depositTitle: 'Deposit',
-    depositBody: 'Deposits happen in the bot only. Tap Deposit, send at least 50 birr by Telebirr, then paste the SMS or the receipt link to the bot.',
+    depositBody: 'Deposits happen in the bot only. Tap Deposit, send at least 10 birr by Telebirr, then paste the SMS or the receipt link to the bot.',
     toBot: 'Go to the bot', withdrawTitle: 'Withdraw', tele: 'Telebirr phone number',
     amount: 'Amount (birr, min {min})', send: 'Send request', sent: 'Request sent. An admin will pay you by Telebirr.',
     withdrawable: 'Withdrawable', playOnly: 'Play only', noTx: 'No activity yet.',
     wins: 'Games won', invites: 'Invited', earned: 'Total earned', language: 'Language',
-    inviteTitle: 'Invite friends', inviteBody: 'Your friend gets 10 birr when they join. You get 10 birr when their first deposit is approved. Invite 20 friends who deposit and get 150 birr.',
-    copy: 'Copy', copied: 'Copied', shareBtn: 'Share', shareText: 'Play Bingo with me! You get 10 birr when you join.',
+    inviteTitle: 'Invite friends', inviteBody: 'Your friend gets 10 birr when they join. You get 10 birr when their first deposit of at least 50 birr is approved. Invite 20 friends who deposit and get 150 birr.',
+    copy: 'Copy', copied: 'Copied', shareBtn: 'Share', shareText: 'Play Big Bingo with me! Invite 20 people and get 150 birr! 🎁',
     connecting: 'Connecting to the game…', reconnecting: 'Reconnecting…', loading: 'Loading…',
     waking: 'Waking up the server… this can take up to a minute', tagline: 'Pick your numbers. Shout BINGO. Win.', welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10', play5: 'Play 5', statPct: 'Paid to winners', statSpots: 'Spots per game', statSold: 'Cartelas taken now', prizeNow: 'Prize',
     players: 'Players', gameId: 'Game ID', bet: 'Bet', derash: 'Derash', stake: 'Stake',
     back: 'Back', refresh: 'Refresh', leave: 'Leave', auto: 'Automatic',
     lobbyRound: 'Current round', lobbyPlayers: 'Players this round', lobbyPrize: 'Current prize',
     k_signup_bonus: 'Welcome bonus', k_deposit: 'Deposit', k_referral: 'Invite reward', k_entry: 'Cartela payment',
-    k_win: 'Prize won', k_withdraw: 'Withdrawal', k_refund: 'Refund',
+    k_win: 'Prize won', k_cashback: 'Weekly cashback', k_withdraw: 'Withdrawal', k_refund: 'Refund',
   },
 }
 
@@ -440,6 +442,28 @@ function Result({ g, me, now }) {
   )
 }
 
+function CashbackCard({ c }) {
+  const { t } = useL()
+  const now = useNow()
+  const pct = Math.min(100, Math.max(0, ((now - c.start) / (c.end - c.start)) * 100))
+  const days = Math.max(1, Math.ceil((c.end - now) / 86400000))
+  return (
+    <section className="rounded-3xl bg-panel p-4">
+      <h2 className="font-semibold">🎁 {t('cbTitle', { pct: c.percent })}</h2>
+      <p className="mt-3 flex justify-between text-sm"><span className="text-white/70">{t('cbDeposit')}</span><b className="tabular-nums">{birr(c.deposited)} {t('birr')}</b></p>
+      <p className="mt-1 flex justify-between text-sm"><span className="text-white/70">{t('cbLost')}</span><b className="tabular-nums">{birr(c.lost)} {t('birr')}</b></p>
+      <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="mt-3 h-3 overflow-hidden rounded-full bg-white/15">
+        <div className="h-full rounded-full bg-gradient-to-r from-mint to-saffron transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-2 flex justify-between text-sm">
+        <span>{t('cbSoFar')}: <b className="text-saffron">{birr(c.amount)} {t('birr')}</b></span>
+        <span className="text-white/60">{t('cbDays', { n: days })}</span>
+      </p>
+      <p className="mt-2 text-xs text-white/60">{t('cbNote')}</p>
+    </section>
+  )
+}
+
 function Wallet({ me, refresh }) {
   const { t } = useL()
   const [phone, setPhone] = useState('')
@@ -471,6 +495,7 @@ function Wallet({ me, refresh }) {
           <p className="text-xs text-white/60">{t('playOnly')}</p>
         </article>
       </section>
+      {me?.cashback && <CashbackCard c={me.cashback} />}
       <section className="rounded-3xl bg-panel p-4">
         <h2 className="font-semibold">{t('depositTitle')}</h2>
         <p className="mt-1 text-sm text-white/70">{t('depositBody')}</p>

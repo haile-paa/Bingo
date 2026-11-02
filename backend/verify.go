@@ -1,6 +1,7 @@
 // backend/verify.go - checks Telebirr deposits with the Verify.ET API (https://verify.et/docs/api)
 package main
 
+
 import (
 	"bytes"
 	"context"
@@ -37,9 +38,13 @@ type verifyItem struct {
 	SenderName      string  `json:"senderName"`
 	ReceiverName    string  `json:"receiverName"`
 	ReceiverAccount string  `json:"receiverAccount"`
+	Timestamp       string  `json:"timestamp"`
 	Settlement      *struct {
 		Matched bool `json:"matched"`
 	} `json:"settlementAccountMatch"`
+	History *struct {
+		ConfirmedBefore bool `json:"confirmedBefore"`
+	} `json:"confirmationHistory"`
 }
 
 type recvState int

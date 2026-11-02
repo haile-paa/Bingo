@@ -16,9 +16,10 @@ RUN CGO_ENABLED=0 go build -o /out/bingo .
 
 # 3) small runtime image (the backend serves ../frontend/dist)
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 app
 WORKDIR /app/backend
 COPY --from=api /out/bingo ./bingo
 COPY --from=web /src/frontend/dist /app/frontend/dist
 EXPOSE 10000
+USER app
 CMD ["./bingo"]

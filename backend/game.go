@@ -305,6 +305,7 @@ func (g *Game) claim(ctx context.Context, cl *Client, n int) string {
 		return "funds"
 	}
 	addTx(ctx, cl.uid, "entry", -g.fee, strconv.Itoa(n))
+	cbInc(ctx, cl.uid, "wagered", g.fee)
 	g.spots[n] = Spot{UID: cl.uid, Bonus: field == "bonus"}
 	return ""
 }
@@ -414,6 +415,7 @@ func (g *Game) finish(wins []int, prize int64) {
 		share := prize / int64(len(wins))
 		res.Prize = prize
 		paid := map[int64]int64{}
+		won := map[int64]int64{} // stake money of the winning cartelas, removed from the weekly cashback
 		for _, n := range wins {
 			uid := spots[n].UID
 			u, err := loadUser(ctx, uid)
@@ -423,12 +425,14 @@ func (g *Game) finish(wins []int, prize int64) {
 			res.Winners = append(res.Winners, WinnerOut{Cartela: n, UID: uid, Name: u.Name,
 				Phone: maskPhone(u.Phone), Share: share, Card: cartelas[n]})
 			paid[uid] += share
+			won[uid] += g.fee
 		}
 		for uid, amt := range paid {
 			if err := payWinner(ctx, uid, amt, round); err != nil {
 				log.Println("PAYOUT FAILED", uid, amt, err)
 				continue
 			}
+			cbInc(ctx, uid, "wonStake", won[uid])
 			go notify(uid, "🏆 አሸንፈዋል! "+birr(amt)+" ብር ወደ ዋሌትዎ ተጨምሯል።")
 		}
 	}
@@ -440,7 +444,7 @@ func (g *Game) finish(wins []int, prize int64) {
 
 // --- websocket ---
 
-var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+var upgrader = websocket.Upgrader{CheckOrigin: originOK, ReadBufferSize: 1024, WriteBufferSize: 4096}
 
 func wsHandler(c *gin.Context) {
 	uid, name, ok := authValue(c.Query("a"))
@@ -456,6 +460,10 @@ func wsHandler(c *gin.Context) {
 	room := games[stake]
 	if room == nil {
 		c.Status(http.StatusBadRequest)
+		return
+	}
+	if room.countUser(uid) >= 3 || onlineTotal() > 20000 { // too many open sockets for one user / for the server
+		c.Status(http.StatusTooManyRequests)
 		return
 	}
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -475,6 +483,7 @@ func (cl *Client) readLoop() {
 	}()
 	cl.conn.SetReadLimit(512)
 	cl.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	drops := 0
 	cl.conn.SetPongHandler(func(string) error {
 		return cl.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	})
@@ -487,6 +496,13 @@ func (cl *Client) readLoop() {
 			return
 		}
 		if m.Type == "toggle" {
+			// at most 12 taps per 3 seconds; keep spamming and the connection is closed
+			if !rl.allow("ws:"+strconv.FormatInt(cl.uid, 10), 12, 3*time.Second) {
+				if drops++; drops > 30 {
+					return
+				}
+				continue
+			}
 			cl.game.toggle(cl, m.N)
 		}
 	}
