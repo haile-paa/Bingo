@@ -41,7 +41,6 @@ const DICT = {
     inviteTitle: 'ጓደኞችን ይጋብዙ', inviteBody: 'ጓደኛዎ ሲመዘገብ 10 ብር ያገኛል። የመጀመሪያ ገቢው ሲጸድቅ እርስዎ 10 ብር ያገኛሉ። ገቢ ያደረጉ 20 ጓደኞች ሲጋብዙ 150 ብር ያገኛሉ።',
     copy: 'ኮፒ', copied: 'ተቀድቷል', shareBtn: 'አጋራ', shareText: 'ከእኔ ጋር Bingo ይጫወቱ! ሲመዘገቡ 10 ብር ያገኛሉ።',
     connecting: 'ከጨዋታው ጋር በመገናኘት ላይ…', reconnecting: 'እንደገና በመገናኘት ላይ…', loading: 'በመጫን ላይ…',
-    voiceOn: '🔊 ድምፅ', voiceOff: '🔇 ድምፅ',
     waking: 'ሰርቨሩ እየተነሳ ነው… እስከ 1 ደቂቃ ሊወስድ ይችላል', tagline: 'ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!', welcomeTo: 'እንኳን ደህና መጡ ወደ', chooseStake: 'ዋጋዎን ይምረጡ', play10: 'ተጫወት 10', play5: 'ተጫወት 5', statPct: 'ለአሸናፊ የሚከፈል', statSpots: 'ቦታ በአንድ ጨዋታ', statSold: 'አሁን የተያዙ ካርቴላዎች', prizeNow: 'ደራሽ',
     players: 'ተጫዋቾች', gameId: 'የጨዋታ ቁጥር', bet: 'ውርርድ', derash: 'ደራሽ', stake: 'ዋጋ',
     back: 'ተመለስ', refresh: 'አድስ', leave: 'ውጣ', auto: 'አውቶማቲክ',
@@ -79,7 +78,6 @@ const DICT = {
     inviteTitle: 'Invite friends', inviteBody: 'Your friend gets 10 birr when they join. You get 10 birr when their first deposit is approved. Invite 20 friends who deposit and get 150 birr.',
     copy: 'Copy', copied: 'Copied', shareBtn: 'Share', shareText: 'Play Bingo with me! You get 10 birr when you join.',
     connecting: 'Connecting to the game…', reconnecting: 'Reconnecting…', loading: 'Loading…',
-    voiceOn: '🔊 Voice', voiceOff: '🔇 Voice',
     waking: 'Waking up the server… this can take up to a minute', tagline: 'Pick your numbers. Shout BINGO. Win.', welcomeTo: 'Welcome to', chooseStake: 'Choose Your Stake', play10: 'Play 10', play5: 'Play 5', statPct: 'Paid to winners', statSpots: 'Spots per game', statSold: 'Cartelas taken now', prizeNow: 'Prize',
     players: 'Players', gameId: 'Game ID', bet: 'Bet', derash: 'Derash', stake: 'Stake',
     back: 'Back', refresh: 'Refresh', leave: 'Leave', auto: 'Automatic',
@@ -99,25 +97,6 @@ async function api(path, opts = {}) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Something went wrong')
   return data
-}
-
-// One shared <audio> element: once a tap has unlocked it, calls can play by themselves.
-// /voice/<n>.mp3 says the letter and number in Amharic, e.g. "ቢ፣ አሥራ ስድስት".
-const voiceAudio = typeof Audio !== 'undefined' ? new Audio() : null
-
-function unlockVoice() {
-  if (!voiceAudio) return
-  voiceAudio.muted = true
-  voiceAudio.src = '/voice/1.mp3'
-  voiceAudio.play().then(() => { voiceAudio.pause(); voiceAudio.muted = false }).catch(() => { voiceAudio.muted = false })
-}
-
-function speak(n) {
-  if (!voiceAudio) return
-  voiceAudio.pause()
-  voiceAudio.muted = false
-  voiceAudio.src = `/voice/${n}.mp3`
-  voiceAudio.play().catch(() => {})
 }
 
 function useNow() {
@@ -143,13 +122,11 @@ function useRooms(active) {
   return rooms
 }
 
-function useGame(voiceOn, stake) {
+function useGame(stake) {
   const [g, setG] = useState(null)
   const [conn, setConn] = useState(false)
   const [err, setErr] = useState('')
   const ws = useRef(null)
-  const voice = useRef(voiceOn)
-  voice.current = voiceOn
 
   useEffect(() => {
     setG(null)
@@ -178,7 +155,6 @@ function useGame(voiceOn, stake) {
           })
         } else if (m.type === 'call') {
           setG((p) => p && { ...p, phase: 'run', called: m.called })
-          if (voice.current) speak(m.n)
         } else if (m.type === 'error') {
           setErr(m.code)
           setTimeout(() => setErr(''), 4000)
@@ -231,7 +207,7 @@ function Rules({ v }) {
   )
 }
 
-const RULE_VALUES = { pick: 30, total: 200, pct: 75, cut: 25 }
+const RULE_VALUES = { pick: 30, total: 300, pct: 80, cut: 20 }
 
 // ---------- skeleton (shown while the server is waking up) ----------
 const Sk = ({ className = '' }) => <div className={`skel ${className}`} aria-hidden />
@@ -294,7 +270,7 @@ function Lobby({ rooms, onPlay }) {
         </button>
       </section>
       <section className="glass mt-6 space-y-6 rounded-3xl px-5 py-8 text-center">
-        {[[`${RULE_VALUES.pct}%`, t('statPct')], [RULE_VALUES.total, t('statSpots')], [rooms ? sold : null, t('statSold')]].map(([n, label]) => (
+        {[[RULE_VALUES.total, t('statSpots')], [rooms ? sold : null, t('statSold')]].map(([n, label]) => (
           <div key={label}>
             {n === null ? <Sk className="mx-auto h-9 w-24" /> : <p className="text-4xl font-bold tabular-nums">{n}</p>}
             <p className="mt-1 text-purple-200">{label}</p>
@@ -365,7 +341,7 @@ function Pick({ g, me, toggle, now, onBack, onRefresh }) {
 }
 
 // ---------- page 3: the bingo section (opens by itself when the 30 s are over) ----------
-function Bingo({ g, voice, toggleVoice, onLeave, onRefresh }) {
+function Bingo({ g, onLeave, onRefresh }) {
   const { t } = useL()
   const set = new Set(g.called)
   const last = g.called[g.called.length - 1]
@@ -394,7 +370,6 @@ function Bingo({ g, voice, toggleVoice, onLeave, onRefresh }) {
         <div className="min-w-0">
           <section className="glass flex items-center justify-between rounded-xl p-2">
             {last ? <span className={`rounded-full px-3 py-1 text-sm font-bold tabular-nums ${ballBg(last)}`}>{letterOf(last)}-{last}</span> : <span />}
-            <button onClick={toggleVoice} aria-pressed={voice} aria-label={voice ? t('voiceOn') : t('voiceOff')} className="px-2 text-lg">{voice ? '🔊' : '🔇'}</button>
           </section>
           <section className="glass mt-2 grid place-items-center rounded-xl py-4">
             {last ? (
@@ -551,6 +526,14 @@ function Profile({ me }) {
   const cards = [[t('main'), birr(me.balance)], [t('bonus'), birr(me.bonus)], [t('wins'), me.gamesWon], [t('invites'), me.referrals], [t('earned'), birr(me.earned)]]
   return (
     <div className="space-y-5">
+      <section className="flex items-center justify-between rounded-3xl bg-panel p-4">
+        <span className="font-semibold">{t('language')}</span>
+        <div className="flex gap-2">
+          {[['am', 'አማርኛ'], ['en', 'English']].map(([id, label]) => (
+            <button key={id} onClick={() => set(id)} aria-pressed={lang === id} className={`rounded-full px-4 py-2 text-sm font-semibold ${lang === id ? 'bg-saffron text-ink' : 'bg-ink'}`}>{label}</button>
+          ))}
+        </div>
+      </section>
       <section className="text-center">
         <p className="mx-auto grid size-20 place-items-center rounded-full bg-panel text-3xl font-bold">{me.name?.[0]}</p>
         <p className="mt-2 text-xl font-bold">{me.name}</p>
@@ -574,14 +557,6 @@ function Profile({ me }) {
           <button onClick={share} className="rounded-2xl bg-saffron py-3 font-bold text-ink">{t('shareBtn')}</button>
         </div>
       </section>
-      <section className="flex items-center justify-between rounded-3xl bg-panel p-4">
-        <span className="font-semibold">{t('language')}</span>
-        <div className="flex gap-2">
-          {[['am', 'አማርኛ'], ['en', 'English']].map(([id, label]) => (
-            <button key={id} onClick={() => set(id)} aria-pressed={lang === id} className={`rounded-full px-4 py-2 text-sm font-semibold ${lang === id ? 'bg-saffron text-ink' : 'bg-ink'}`}>{label}</button>
-          ))}
-        </div>
-      </section>
     </div>
   )
 }
@@ -591,11 +566,10 @@ function Player() {
   const [tab, setTab] = useState('game')
   const [view, setView] = useState('lobby') // lobby (Play 5 / Play 10) -> play (numbers, then bingo, then winner)
   const [stake, setStake] = useState(null)
-  const [voice, setVoice] = useState(true)
   const [me, setMe] = useState(null)
   const now = useNow()
   const rooms = useRooms(tab === 'game' && view === 'lobby')
-  const { g, conn, err, toggle, reconnect } = useGame(voice, view === 'play' ? stake : null)
+  const { g, conn, err, toggle, reconnect } = useGame(view === 'play' ? stake : null)
   const refresh = useCallback(() => api('/api/me').then(setMe).catch(() => {}), [])
 
   useEffect(() => {
@@ -606,13 +580,7 @@ function Player() {
     refresh()
   }, [refresh, g?.phase, g?.mine?.length])
 
-  const toggleVoice = () => {
-    const next = !voice
-    setVoice(next)
-    if (next) speak(16) // short sample, also unlocks sound on this phone
-  }
   const play = (st) => {
-    unlockVoice() // this tap lets the phone play the Amharic calls later
     setStake(st)
     setView('play')
   }
@@ -630,7 +598,7 @@ function Player() {
         {tab === 'game' && (view === 'lobby' ? <Lobby rooms={rooms} onPlay={play} />
           : !g ? <GameSkeleton />
           : g.phase === 'pick' ? <Pick g={g} me={me} toggle={toggle} now={now} onBack={toLobby} onRefresh={reload} />
-          : g.phase === 'run' ? <Bingo g={g} voice={voice} toggleVoice={toggleVoice} onLeave={toLobby} onRefresh={reload} />
+          : g.phase === 'run' ? <Bingo g={g} onLeave={toLobby} onRefresh={reload} />
           : <Result g={g} me={me} now={now} />)}
         {tab === 'history' && <History me={me} />}
         {tab === 'wallet' && <Wallet me={me} refresh={refresh} />}

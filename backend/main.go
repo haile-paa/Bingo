@@ -163,7 +163,6 @@ func main() {
 	adm.POST("/withdrawals/:id/:action", withdrawalAction)
 
 	r.Static("/assets", "../frontend/dist/assets")
-	r.Static("/voice", "../frontend/dist/voice") // Amharic number calls (mp3)
 	r.NoRoute(func(c *gin.Context) { c.File("../frontend/dist/index.html") })
 	log.Fatal(r.Run(":" + cfg.Port))
 }

@@ -26,8 +26,8 @@ const (
 	referralBonus int64 = 1000  // per invited friend whose first deposit is approved (set 0 to turn off)
 	inviteGoal    int64 = 20    // every 20 such friends ...
 	inviteReward  int64 = 15000 // ... pay 150 birr into the play wallet
-	payoutPercent int64 = 75 // players share 75% of the stakes, the company keeps 25%
-	totalSpots          = 200 // cartelas per room
+	payoutPercent int64 = 80 // players share 80% of the stakes, the company keeps 20%
+	totalSpots          = 300 // cartelas per room
 	minSpots            = 2  // fewest cartelas needed to start a round (testing; set back to 30 for production)
 	maxPerUser          = 2  // cartelas one person can hold per round
 )

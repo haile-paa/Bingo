@@ -164,7 +164,7 @@ func hasBingo(card [5][5]int, m *[76]bool) bool {
 	return d1 || d2
 }
 
-// prizePool: players get payoutPercent (75%) of all stakes paid in; the company keeps the rest (25%).
+// prizePool: players get payoutPercent (80%) of all stakes paid in; the company keeps the rest (20%).
 func (g *Game) prizePool(n int) int64 { return int64(n) * g.fee * payoutPercent / 100 }
 
 // --- messaging (callers hold g.mu) ---
