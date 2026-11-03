@@ -184,6 +184,8 @@ func main() {
 	adm.POST("/deposits/:id/:action", depositAction)
 	adm.POST("/withdrawals/:id/:action", withdrawalAction)
 
+	registerFinance(r) // owner-only finance dashboard at /finance (needs OWNER_PHONE + OWNER_PASSWORD)
+
 	r.Static("/assets", "../frontend/dist/assets")
 	r.NoRoute(func(c *gin.Context) { c.File("../frontend/dist/index.html") })
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r, ReadHeaderTimeout: 10 * time.Second,

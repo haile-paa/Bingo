@@ -20,6 +20,7 @@ RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 app
 WORKDIR /app/backend
 COPY --from=api /out/bingo ./bingo
 COPY --from=web /src/frontend/dist /app/frontend/dist
+COPY finance /app/finance
 EXPOSE 10000
 USER app
 CMD ["./bingo"]

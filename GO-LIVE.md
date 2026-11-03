@@ -12,6 +12,7 @@
 | TELEBIRR_NUMBER / TELEBIRR_NAME | the account players pay into |
 | VERIFY_ET_API_KEY | Verify.ET key (permission: verification:write) |
 | SUPPORT_USER | support Telegram username |
+| OWNER_PHONE / OWNER_PASSWORD | login for the finance dashboard at `/finance` (password 10+ characters, ideally 16+) |
 Do NOT set `DEV`. Generate random values with: `openssl rand -hex 24`
 
 ## 2. Before the first real player
@@ -32,3 +33,8 @@ Do NOT set `DEV`. Generate random values with: `openssl rand -hex 24`
 ## 4. Every day
 - Admin panel: approve/reject deposits that fell back to manual, pay withdrawals.
 - Watch the Render logs for `PAYOUT FAILED`, `CASHBACK FAILED`, `REFUND FAILED`.
+
+## 5. Finance dashboard (`/finance`)
+- Owner-only login with `OWNER_PHONE` + `OWNER_PASSWORD`. Without both variables the page stays off.
+- Shows revenue, profit, deposits, withdrawals, players, cash vs. owed, and your own expenses list. It cannot approve deposits or pay withdrawals - keep using the Admin panel for that.
+- Wrong password 8 times in 10 minutes locks the login for 10 minutes. Sessions last 12 hours and end when you change the password.

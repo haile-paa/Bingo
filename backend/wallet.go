@@ -23,11 +23,11 @@ const (
 	minDeposit    int64 = 1000
 	minWithdraw   int64 = 10000
 	signupBonus   int64 = 1000
-	refMinDeposit int64 = 1000  // an invited friend counts only after a first deposit of at least 10 birr (stops fake-account farming)
+	refMinDeposit int64 = 5000  // an invited friend counts only after a first deposit of at least 50 birr (stops fake-account farming)
 	referralBonus int64 = 1000  // per invited friend whose first deposit is approved (set 0 to turn off)
 	inviteGoal    int64 = 20    // every 20 such friends ...
 	inviteReward  int64 = 15000 // ... pay 150 birr into the play wallet
-	payoutPercent int64 = 85 // players share 85% of the stakes, the company keeps 15%
+	payoutPercent int64 = 80 // players share 80% of the stakes, the company keeps 20%
 	totalSpots          = 300 // cartelas per room
 	minSpots            = 20 // fewest cartelas needed to start a round
 	maxPerUser          = 2  // cartelas one person can hold per round
@@ -96,6 +96,8 @@ func ensureIndexes(ctx context.Context) {
 	add("deposits", byStatus, nil)
 	add("withdrawals", byStatus, nil)
 	add("txs", bson.D{{Key: "uid", Value: 1}, {Key: "at", Value: -1}}, nil)
+	add("expenses", bson.D{{Key: "date", Value: -1}}, nil)
+	add("withdrawals", bson.D{{Key: "status", Value: 1}, {Key: "decidedAt", Value: -1}}, nil)
 	add("cashback", bson.D{{Key: "uid", Value: 1}, {Key: "week", Value: 1}}, options.Index().SetUnique(true))
 	add("users", bson.D{{Key: "referredBy", Value: 1}}, nil)
 	add("users", bson.D{{Key: "phone", Value: 1}}, options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{"phone": bson.M{"$exists": true}}))
