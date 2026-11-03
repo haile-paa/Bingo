@@ -155,6 +155,15 @@ function useGame(stake) {
             prize: m.prize,
             taken: m.on ? [...new Set([...p.taken, m.n])] : p.taken.filter((x) => x !== m.n),
           })
+        } else if (m.type === 'spots') {
+          setG((p) => {
+            if (!p) return p
+            const t = new Set(p.taken)
+            for (const s of m.list) { if (s.on) t.add(s.n); else t.delete(s.n) }
+            return { ...p, prize: m.prize, taken: [...t] }
+          })
+        } else if (m.type === 'sync') {
+          setG((p) => p && { ...p, prize: m.prize, taken: m.taken })
         } else if (m.type === 'call') {
           setG((p) => p && { ...p, phase: 'run', called: m.called })
         } else if (m.type === 'error') {

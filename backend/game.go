@@ -41,8 +41,10 @@ func init() {
 }
 
 type Spot struct {
-	UID   int64
-	Bonus bool // paid from the play-only bonus wallet
+	UID     int64
+	Bonus   bool   // paid from the play-only bonus wallet
+	Pending bool   // reserved, payment still in progress (not part of the round yet)
+	Tok     string // unique id of this purchase
 }
 
 type WinnerOut struct {
@@ -60,6 +62,7 @@ type Result struct {
 }
 
 type Client struct {
+	registered bool // phone number already checked on this connection
 	game *Game
 	uid  int64
 	name string
@@ -73,6 +76,7 @@ type Game struct {
 	phase    string // pick | run | result
 	round    int64
 	gid      string // short public id of the current game
+	dirty    []gin.H // spot changes waiting to be sent to everybody (sent 4 times a second in one message)
 	deadline time.Time
 	spots    map[int]Spot
 	called   []int
@@ -91,6 +95,7 @@ func startGames() {
 		g := newGame(int64(st) * 100)
 		games[st] = g
 		go g.run()
+		go g.flushLoop()
 	}
 }
 
@@ -197,7 +202,7 @@ func (g *Game) pushAll(v any) {
 func (g *Game) mineOf(uid int64) ([]int, gin.H) {
 	mine, cards := []int{}, gin.H{}
 	for n, s := range g.spots {
-		if s.UID == uid {
+		if s.UID == uid && !s.Pending {
 			mine = append(mine, n)
 			cards[strconv.Itoa(n)] = cartelas[n]
 		}
@@ -206,14 +211,32 @@ func (g *Game) mineOf(uid int64) ([]int, gin.H) {
 	return mine, cards
 }
 
-func (g *Game) stateFor(uid int64) gin.H {
-	taken := make([]int, 0, len(g.spots))
-	for n := range g.spots {
-		taken = append(taken, n)
+// nSpots counts the cartelas that are really in the round (not the ones still being paid for).
+func (g *Game) nSpots() int {
+	n := 0
+	for _, s := range g.spots {
+		if !s.Pending {
+			n++
+		}
 	}
+	return n
+}
+
+func (g *Game) takenList() []int {
+	taken := make([]int, 0, len(g.spots))
+	for n, s := range g.spots {
+		if !s.Pending {
+			taken = append(taken, n)
+		}
+	}
+	return taken
+}
+
+func (g *Game) stateFor(uid int64) gin.H {
+	taken := g.takenList()
 	mine, cards := g.mineOf(uid)
 	return gin.H{"type": "state", "phase": g.phase, "round": g.round, "gid": g.gid, "deadline": g.deadline.UnixMilli(),
-		"taken": taken, "mine": mine, "cards": cards, "prize": g.prizePool(len(g.spots)), "fee": g.fee,
+		"taken": taken, "mine": mine, "cards": cards, "prize": g.prizePool(g.nSpots()), "fee": g.fee,
 		"total": totalSpots, "called": g.called, "result": g.result,
 		"cfg": gin.H{"pick": int(pickTime / time.Second), "call": int(callEvery / time.Second),
 			"max": maxPerUser, "min": minSpots, "pct": payoutPercent}}
@@ -250,73 +273,99 @@ func (g *Game) online() int {
 // --- picking ---
 
 func (g *Game) toggle(cl *Client, n int) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.phase != "pick" {
-		cl.fail("closed")
-		return
-	}
 	if n < 1 || n > totalSpots {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	g.mu.Lock()
+	if g.phase != "pick" {
+		g.mu.Unlock()
+		cl.fail("closed")
+		return
+	}
 	s, held := g.spots[n]
 	if held && s.UID != cl.uid {
+		g.mu.Unlock()
 		cl.fail("taken")
 		return
 	}
-	if held { // tap again to release and get the money back
+	if held && s.Pending { // this tap is still being processed
+		g.mu.Unlock()
+		return
+	}
+	gid, fee := g.gid, g.fee
+	if held { // tap again to release: the number is free at once, the money comes back in the background
 		delete(g.spots, n)
-		refundSpot(ctx, s, n, g.fee)
 		g.announce(cl, n, false)
+		g.mu.Unlock()
+		bg(func() { refundByTok(gid, n, s, fee) })
 		return
-	}
-	if code := g.claim(ctx, cl, n); code != "" {
-		cl.fail(code)
-		return
-	}
-	g.announce(cl, n, true)
-}
-
-func (g *Game) claim(ctx context.Context, cl *Client, n int) string {
-	u, err := loadUser(ctx, cl.uid)
-	if err != nil {
-		return "server"
-	}
-	if u.Phone == "" && !cfg.Dev {
-		return "register"
 	}
 	owned := 0
-	for _, s := range g.spots {
-		if s.UID == cl.uid {
+	for _, o := range g.spots {
+		if o.UID == cl.uid {
 			owned++
 		}
 	}
 	if owned >= maxPerUser {
-		return "limit"
+		g.mu.Unlock()
+		cl.fail("limit")
+		return
 	}
-	field, err := spend(ctx, cl.uid, g.fee)
-	if err != nil {
-		log.Println("claim:", err)
-		return "server"
+	tok := newTok()
+	g.spots[n] = Spot{UID: cl.uid, Pending: true, Tok: tok} // reserve the number, then pay WITHOUT holding the lock
+	g.mu.Unlock()
+
+	field, code := g.pay(cl, n, gid, tok)
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	cur, ok := g.spots[n]
+	mine := ok && cur.Pending && cur.Tok == tok
+	if code != "" {
+		if mine {
+			delete(g.spots, n)
+		}
+		cl.fail(code)
+		return
 	}
-	if field == "" {
-		return "funds"
+	if !mine || g.phase != "pick" || g.gid != gid { // the round moved on while we were paying: give the money back
+		if mine {
+			delete(g.spots, n)
+		}
+		paid := Spot{UID: cl.uid, Bonus: field == "bonus", Tok: tok}
+		bg(func() { refundByTok(gid, n, paid, fee) })
+		cl.fail("closed")
+		return
 	}
-	addTx(ctx, cl.uid, "entry", -g.fee, strconv.Itoa(n))
-	cbInc(ctx, cl.uid, "wagered", g.fee)
-	g.spots[n] = Spot{UID: cl.uid, Bonus: field == "bonus"}
-	return ""
+	g.spots[n] = Spot{UID: cl.uid, Bonus: field == "bonus", Tok: tok}
+	g.announce(cl, n, true)
 }
 
+// announce tells the player about their own cartelas at once, and queues the change for everybody else.
 func (g *Game) announce(cl *Client, n int, on bool) {
 	mine, cards := g.mineOf(cl.uid)
 	cl.pushJSON(gin.H{"type": "mine", "mine": mine, "cards": cards})
-	g.pushAll(gin.H{"type": "spot", "n": n, "on": on, "prize": g.prizePool(len(g.spots))})
+	g.dirty = append(g.dirty, gin.H{"n": n, "on": on})
 }
 
-// --- round loop ---
+// flushLoop sends the queued spot changes 4 times a second as ONE message, and a full list every 5 seconds
+// so a phone that missed a message catches up.
+func (g *Game) flushLoop() {
+	tick := 0
+	for {
+		time.Sleep(250 * time.Millisecond)
+		tick++
+		g.mu.Lock()
+		if len(g.dirty) > 0 {
+			g.pushAll(gin.H{"type": "spots", "list": g.dirty, "prize": g.prizePool(g.nSpots())})
+			g.dirty = nil
+		}
+		if tick%20 == 0 && g.phase == "pick" {
+			g.pushAll(gin.H{"type": "sync", "taken": g.takenList(), "prize": g.prizePool(g.nSpots())})
+		}
+		g.mu.Unlock()
+	}
+}
 
 func (g *Game) run() {
 	for {
@@ -331,7 +380,7 @@ func (g *Game) pick() {
 	g.round++
 	g.gid = newGameID()
 	g.phase, g.deadline, g.result = "pick", time.Now().Add(pickTime), nil
-	g.spots, g.called = map[int]Spot{}, []int{}
+	g.spots, g.called, g.dirty = map[int]Spot{}, []int{}, nil
 	g.marked = [76]bool{}
 	g.pushState()
 	g.mu.Unlock()
@@ -339,7 +388,7 @@ func (g *Game) pick() {
 		time.Sleep(time.Second)
 		g.mu.Lock()
 		due := time.Now().After(g.deadline)
-		ready := due && len(g.spots) >= minSpots
+		ready := due && g.nSpots() >= minSpots
 		if due && !ready { // not enough cartelas yet: keep the picks and wait another round of time
 			g.deadline = time.Now().Add(pickTime)
 			g.pushState()
@@ -366,6 +415,11 @@ func (g *Game) winningSpots() []int {
 func (g *Game) play() {
 	g.mu.Lock()
 	g.phase, g.deadline = "run", time.Now()
+	for n, s := range g.spots { // a payment still in progress misses this round and is refunded when it finishes
+		if s.Pending {
+			delete(g.spots, n)
+		}
+	}
 	prize := g.prizePool(len(g.spots))
 	g.pushState()
 	g.mu.Unlock()
@@ -402,8 +456,9 @@ func (g *Game) finish(wins []int, prize int64) {
 	for n, s := range g.spots {
 		spots[n] = s
 	}
-	round := g.round
+	round, gid := g.round, g.gid
 	g.mu.Unlock()
+	dropSpotDocs(ctx, gid) // before any money moves, so a crash can never refund stakes of a round that paid out
 
 	res := &Result{Winners: []WinnerOut{}}
 	if len(wins) == 0 { // nobody got bingo: give every stake back
@@ -470,7 +525,7 @@ func wsHandler(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	cl := &Client{game: room, uid: uid, name: name, conn: conn, send: make(chan []byte, 32)}
+	cl := &Client{game: room, uid: uid, name: name, conn: conn, send: make(chan []byte, 64)}
 	room.add(cl)
 	go cl.writeLoop()
 	cl.readLoop()

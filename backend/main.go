@@ -160,7 +160,9 @@ func main() {
 	db = client.Database("bingo")
 	ensureIndexes(ctx)
 
+	startBG()
 	startGames()
+	go startSpotJanitor()
 	go startCashback()
 	go setupBotMenu()
 

@@ -96,6 +96,8 @@ func ensureIndexes(ctx context.Context) {
 	add("deposits", byStatus, nil)
 	add("withdrawals", byStatus, nil)
 	add("txs", bson.D{{Key: "uid", Value: 1}, {Key: "at", Value: -1}}, nil)
+	add("spots", bson.D{{Key: "tok", Value: 1}}, options.Index().SetUnique(true))
+	add("spots", bson.D{{Key: "at", Value: 1}}, nil)
 	add("expenses", bson.D{{Key: "date", Value: -1}}, nil)
 	add("withdrawals", bson.D{{Key: "status", Value: 1}, {Key: "decidedAt", Value: -1}}, nil)
 	add("cashback", bson.D{{Key: "uid", Value: 1}, {Key: "week", Value: 1}}, options.Index().SetUnique(true))

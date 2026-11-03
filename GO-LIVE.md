@@ -38,3 +38,6 @@ Do NOT set `DEV`. Generate random values with: `openssl rand -hex 24`
 - Owner-only login with `OWNER_PHONE` + `OWNER_PASSWORD`. Without both variables the page stays off.
 - Shows revenue, profit, deposits, withdrawals, players, cash vs. owed, and your own expenses list. It cannot approve deposits or pay withdrawals - keep using the Admin panel for that.
 - Wrong password 8 times in 10 minutes locks the login for 10 minutes. Sessions last 12 hours and end when you change the password.
+
+## 6. If the server restarts during a round
+Every paid cartela is also saved in the database. If the server stops mid-round, a cleanup job (runs every minute) gives those stakes back after about 6 minutes and sends the player a Telegram message. Prizes are never refunded this way once a round has finished.
