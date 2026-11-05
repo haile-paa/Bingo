@@ -411,7 +411,7 @@ func (g *Game) pick() {
 				go g.fillBots(gid, stake, need)
 			}
 		}
-		ready := due && g.nSpots() >= minSpots && (len(g.botList()) == 0 || g.nReal() >= 1)
+		ready := due && g.nSpots() >= minSpots // bots count too: the round starts after the pick time even if no real player joined
 		if due && !ready { // not enough cartelas yet: keep the picks and wait another round of time
 			g.deadline = time.Now().Add(pickTime)
 			g.pushState()
@@ -426,8 +426,8 @@ func (g *Game) pick() {
 func (g *Game) winningSpots() []int {
 	var out []int
 	for n, s := range g.spots {
-		if s.Bot && !g.botWin {
-			continue // bots only hold numbers unless the owner allowed them to win
+		if s.Bot && !g.botWin && g.nReal() > 0 {
+			continue // bots only hold numbers unless the owner allowed them to win (a round with no real player ends with a bot winner, nothing is saved or paid)
 		}
 		if hasBingo(cartelas[n], &g.marked) {
 			out = append(out, n)
