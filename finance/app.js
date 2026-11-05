@@ -31,9 +31,10 @@ const ICONS = {
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.5 3.2-5.5 6.5-5.5s5.9 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.4.2 4 1.8 4.5 4.5"/>',
   cash: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/><circle cx="16.5" cy="15" r="1.2"/>',
   expenses: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+  announce: '<path d="M3 11v2a1 1 0 0 0 1 1h2l6 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M16 8a5 5 0 0 1 0 8"/><path d="M19 5a9 9 0 0 1 0 14"/>',
 }
 const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`
-const PAGES = [['overview', 'Overview'], ['revenue', 'Revenue'], ['people', 'People'], ['cash', 'Cash'], ['expenses', 'Expenses']]
+const PAGES = [['overview', 'Overview'], ['revenue', 'Revenue'], ['people', 'People'], ['cash', 'Cash'], ['expenses', 'Expenses'], ['announce', 'Announce', 'Announcements']]
 const KINDS = {
   entry: ['Bet', 'v'], win: ['Prize won', 'g'], deposit: ['Deposit', 'b'], withdraw: ['Withdraw request', 'a'],
   refund: ['Refund', 'a'], signup_bonus: ['Signup bonus', 'v'], referral: ['Invite reward', 'v'], cashback: ['Cashback', 'v'],
@@ -48,7 +49,8 @@ function setPreset(n) { S.preset = n; S.to = today(); S.from = addDays(S.to, -(n
 
 async function api(path, opt = {}) {
   const o = { method: opt.method || 'GET', credentials: 'same-origin', headers: { 'X-Finance': '1' } }
-  if (opt.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opt.body) }
+  if (opt.form) o.body = opt.form
+  else if (opt.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opt.body) }
   const r = await fetch('/finance/api' + path, o)
   if (r.status === 401 && path !== '/login') { renderLogin(); throw new Error('login') }
   const j = await r.json().catch(() => ({}))
@@ -199,7 +201,7 @@ function renderShell() {
   <div class="shell">
     <aside class="side">
       <div class="logo"><i>₿</i> ${esc(BRAND)}</div>
-      <nav class="nav" id="nav">${PAGES.map(([k, l]) => `<button data-p="${k}">${icon(k === 'cash' ? 'cash' : k)}<span>${l}</span>${k === 'cash' ? '<span class="badge" id="bd" hidden></span>' : ''}</button>`).join('')}</nav>
+      <nav class="nav" id="nav">${PAGES.map(([k, l]) => `<button data-p="${k}">${icon(k)}<span>${l}</span>${k === 'cash' ? '<span class="badge" id="bd" hidden></span>' : ''}</button>`).join('')}</nav>
       <div class="foot"><b>Owner ${esc(S.owner)}</b><button class="btn ghost small" id="lo" style="width:100%">Log out</button></div>
     </aside>
     <main class="main"><header class="top" id="top"></header><div id="view"></div></main>
@@ -212,8 +214,9 @@ function renderShell() {
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms) } }
 
 function renderTop() {
-  const title = PAGES.find((p) => p[0] === S.page)[1]
-  const showRange = S.page !== 'cash'
+  const pg = PAGES.find((p) => p[0] === S.page)
+  const title = pg[2] || pg[1]
+  const showRange = S.page !== 'cash' && S.page !== 'announce'
   $('#top').innerHTML = `<h2>${title}</h2><div class="grow"></div>` + (showRange ? `
     <div class="chips" id="chips">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, 'Year']].map(([n, l]) => `<button data-n="${n}" class="${S.preset === n ? 'on' : ''}">${l}</button>`).join('')}<button data-n="0" class="${S.preset === 0 ? 'on' : ''}">Custom</button></div>
     ${S.preset === 0 ? `<div class="dates"><input class="in" type="date" id="df" value="${S.from}" max="${today()}"> to <input class="in" type="date" id="dt" value="${S.to}" max="${today()}"></div>` : ''}` : '')
@@ -249,7 +252,7 @@ async function refresh(manual) {
 
 function renderPage() {
   if (!S.cur) return
-  const fn = { overview: viewOverview, revenue: viewRevenue, people: viewPeople, cash: viewCash, expenses: viewExpenses }[S.page]
+  const fn = { overview: viewOverview, revenue: viewRevenue, people: viewPeople, cash: viewCash, expenses: viewExpenses, announce: viewAnnounce }[S.page]
   fn()
   const st = $('#stamp'); if (st) st.textContent = 'Updated ' + new Date(S.stamp).toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
 }
@@ -489,6 +492,134 @@ async function viewExpenses() {
   } catch (e) { if (e.message !== 'login') $('#el').innerHTML = `<p class="empty">${esc(e.message)}</p>` }
 }
 
+// ---------- announcements ----------
+const A = { tpl: '', text: '', file: null, button: 'play', btnText: '🎮 Play Big Bingo', btnUrl: '', audience: 'all', info: null, counts: {} }
+let annTimer = 0
+const AUD = [['all', 'All registered players'], ['depositors', 'Players who deposited'], ['inactive', 'Not active for 7 days'], ['test', 'Only me (test)']]
+const TEMPLATES = {
+  welcome: '🎉 Big Bingo - ቁጥር ይምረጡ፣ ቢንጎ ይጮሁ፣ ያሸንፉ!\n\n🎟 ከ5 ብር ጀምሮ ይጫወቱ\n🏆 አሸናፊ ሲገኝ ሽልማቱ ወዲያውኑ ወደ ዋሌትዎ ይገባል\n🎁 ሳምንታዊ ካሽባክ እና የጋብዝ ሽልማቶች\n\n📌 Bot: @{bot}\n💬 Support: @{support}\n🔞 18+ · በኃላፊነት ይጫወቱ',
+  invite: '👥 ጓደኞችዎን ይጋብዙ!\n\nገቢ ያደረጉ 20 ጓደኞች ሲጋብዙ 150 ብር ያገኛሉ 🎁\nበመገለጫ (Profile) ውስጥ ያለውን የመጋበዣ ሊንክ ያጋሩ።\n\n📌 Bot: @{bot}\n🔞 18+ · በኃላፊነት ይጫወቱ',
+  cashback: '🎁 ሳምንታዊ ካሽባክ 10%!\n\nበሳምንቱ ያጡት ገንዘብ 10% ሰኞ ወደ የጨዋታ ዋሌትዎ ይመለሳል።\n\n🎟 ከ5 ብር ጀምሮ ይጫወቱ\n📌 Bot: @{bot}\n🔞 18+ · በኃላፊነት ይጫወቱ',
+}
+const fillTpl = (t) => t.replace(/\{bot\}/g, (A.info && A.info.bot) || 'YourBot').replace(/\{support\}/g, (A.info && A.info.support) || 'YourSupport')
+const capLimit = () => (A.file ? 1000 : 4000)
+
+function previewHtml() {
+  const body = esc(A.text).replace(/(https?:\/\/[^\s<]+|@\w{3,})/g, '<span class="lnk">$1</span>')
+  const img = A.file ? `<img src="${A.imgUrl}" alt="">` : ''
+  const btn = A.button !== 'none' ? `<div class="tbtn">${esc(A.btnText || 'Button')}</div>` : ''
+  return `<div class="bubble">${img}<div class="cap">${body || '<span class="mut">Your description appears here…</span>'}</div><div class="time">now ✓✓</div></div>${btn}`
+}
+
+function viewAnnounce() {
+  if ($('#annForm')) { loadAnnHistory(); return }
+  const a = A
+  $('#view').innerHTML = `
+  <div class="grid two eq ann">
+    <section class="card glass" id="annForm"><h3>New announcement</h3>
+      <label class="f" for="at">Start from a template</label>
+      <select class="in" id="at"><option value="">Write my own</option><option value="welcome">Welcome / how to play</option><option value="invite">Invite friends: 20 = 150 birr</option><option value="cashback">Weekly cashback 10%</option></select>
+      <label class="f">Poster (optional)</label>
+      <div class="drop" id="ad" tabindex="0" role="button" aria-label="Choose a poster"></div>
+      <input type="file" id="af" accept="image/jpeg,image/png" hidden>
+      <label class="f" for="ax">Description <span class="mut" id="ac"></span></label>
+      <textarea class="in" id="ax" rows="9" placeholder="Write the message players will read…"></textarea>
+      <label class="f" for="ab">Button under the message</label>
+      <select class="in" id="ab"><option value="play">▶ Play button (opens the game)</option><option value="link">Link button</option><option value="none">No button</option></select>
+      <div id="abx"></div>
+      <label class="f" for="au">Send to <span class="mut" id="an"></span></label>
+      <select class="in" id="au">${AUD.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
+      <div class="actions"><button class="btn ghost" id="tsend">Send test to me</button><button class="btn" id="asend">Send announcement</button></div>
+      <p class="note" id="ahint"></p>
+    </section>
+    <section class="card glass"><h3>Preview <small>as players see it</small></h3><div class="phone" id="apv"></div>
+      <p class="note">Players must have finished registration in the bot to receive messages. People who blocked the bot are counted as “blocked”.</p></section>
+  </div>
+  <section class="card glass" style="margin-top:16px"><h3>Sent announcements</h3><div id="ahist"><div class="skel" style="height:90px;margin-top:12px"></div></div></section>`
+  $('#at').value = a.tpl; $('#ax').value = a.text; $('#ab').value = a.button; $('#au').value = a.audience
+  const sync = () => {
+    $('#ac').textContent = `${[...a.text].length} / ${capLimit()}`
+    $('#ac').className = [...a.text].length > capLimit() ? 'neg' : 'mut'
+    $('#apv').innerHTML = previewHtml()
+  }
+  const drawDrop = () => {
+    const d = $('#ad')
+    d.innerHTML = a.file ? `<img src="${a.imgUrl}" alt=""><div><b>${esc(a.file.name)}</b><small>${(a.file.size / 1048576).toFixed(2)} MB · click to change</small></div><button type="button" class="xbtn" id="adel">Remove</button>`
+      : '<div><b>Click or drop a poster here</b><small>JPG or PNG, up to 5 MB</small></div>'
+    const del = $('#adel'); if (del) del.onclick = (e) => { e.stopPropagation(); a.file = null; $('#af').value = ''; drawDrop(); sync() }
+  }
+  const pick = (f) => {
+    if (!f) return
+    if (!['image/jpeg', 'image/png'].includes(f.type)) return toast('Use a JPG or PNG picture')
+    if (f.size > 5 * 1048576) return toast('The picture is larger than 5 MB')
+    if (a.imgUrl) URL.revokeObjectURL(a.imgUrl)
+    a.file = f; a.imgUrl = URL.createObjectURL(f); drawDrop(); sync()
+  }
+  const drawBtn = () => {
+    $('#abx').innerHTML = a.button === 'none' ? '' : `<label class="f" for="abt">Button text</label><input class="in" id="abt" maxlength="40" value="${esc(a.btnText)}">` +
+      (a.button === 'link' ? `<label class="f" for="abu">Button link (https://…)</label><input class="in" id="abu" inputmode="url" placeholder="https://t.me/…" value="${esc(a.btnUrl)}">` : '')
+    const bt = $('#abt'); if (bt) bt.oninput = () => { a.btnText = bt.value; sync() }
+    const bu = $('#abu'); if (bu) bu.oninput = () => { a.btnUrl = bu.value }
+  }
+  const counts = () => {
+    $('#an').textContent = a.counts[a.audience] === undefined ? '' : `· ${int(a.counts[a.audience])} people`
+    $('#ahint').textContent = a.audience === 'test' && a.info && !a.info.ownerLinked ? 'Your owner phone number is not registered in the bot yet. Register it in the bot first to receive tests.' : ''
+  }
+  $('#at').onchange = (e) => { a.tpl = e.target.value; if (a.tpl) { a.text = fillTpl(TEMPLATES[a.tpl]); $('#ax').value = a.text } sync() }
+  $('#ax').oninput = (e) => { a.text = e.target.value; sync() }
+  $('#ab').onchange = (e) => { a.button = e.target.value; drawBtn(); sync() }
+  $('#au').onchange = (e) => { a.audience = e.target.value; counts() }
+  $('#ad').onclick = () => $('#af').click()
+  $('#ad').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#af').click() } }
+  $('#ad').ondragover = (e) => { e.preventDefault(); $('#ad').classList.add('over') }
+  $('#ad').ondragleave = () => $('#ad').classList.remove('over')
+  $('#ad').ondrop = (e) => { e.preventDefault(); $('#ad').classList.remove('over'); pick(e.dataTransfer.files[0]) }
+  $('#af').onchange = (e) => pick(e.target.files[0])
+  const send = async (audience) => {
+    const n = audience === 'test' ? 1 : a.counts[audience]
+    if (audience !== 'test' && !confirm(`Send this announcement to ${n === undefined ? 'everyone in this audience' : int(n) + ' people'} now? It cannot be undone.`)) return
+    const fd = new FormData()
+    fd.append('text', a.text); fd.append('button', a.button); fd.append('buttonText', a.btnText); fd.append('buttonUrl', a.btnUrl); fd.append('audience', audience)
+    if (a.file) fd.append('image', a.file)
+    const btns = [$('#tsend'), $('#asend')]; btns.forEach((b) => { b.disabled = true })
+    try {
+      await api('/announce/send', { method: 'POST', form: fd })
+      toast(audience === 'test' ? 'Test is on its way to you' : 'Sending started')
+      loadAnnHistory()
+    } catch (e) { if (e.message !== 'login') toast(e.message) }
+    btns.forEach((b) => { b.disabled = false })
+  }
+  $('#tsend').onclick = () => send('test')
+  $('#asend').onclick = () => send(a.audience)
+  drawDrop(); drawBtn(); sync(); counts()
+  api('/announce/info').then((i) => { a.info = i; counts() }).catch(() => {})
+  for (const [k] of AUD.slice(0, 3)) api('/announce/audience?kind=' + k).then((j) => {
+    a.counts[k] = j.count
+    const o = $(`#au option[value="${k}"]`); if (o) o.textContent = `${AUD.find((x) => x[0] === k)[1]} (${int(j.count)})`
+    counts()
+  }).catch(() => {})
+  loadAnnHistory()
+}
+
+async function loadAnnHistory() {
+  clearTimeout(annTimer)
+  const box = $('#ahist'); if (!box) return
+  try {
+    const j = await api('/announce')
+    box.innerHTML = j.rows.length ? `<div class="tablewrap"><table><thead><tr><th>Sent</th><th>To</th><th>Message</th><th>Progress</th><th>Result</th><th></th></tr></thead><tbody>${j.rows.map((r) => {
+      const done = r.sent + r.blocked + r.failed, pct = r.total ? Math.min(100, (done / r.total) * 100) : 0
+      const chip = { sending: 'a', done: 'g', cancelled: 'r', failed: 'r', interrupted: 'r' }[r.status] || ''
+      return `<tr><td>${when(r.createdAt)}</td><td>${esc((AUD.find((x) => x[0] === r.audience) || [0, r.audience])[1])}</td>
+        <td style="text-align:left;white-space:normal;min-width:200px;max-width:280px">${r.hasImage ? '🖼 ' : ''}${esc([...r.text].slice(0, 70).join(''))}${[...r.text].length > 70 ? '…' : ''}</td>
+        <td style="min-width:140px"><div class="bar2"><div style="width:${pct}%"></div></div><small class="mut">${int(done)} / ${int(r.total)}</small></td>
+        <td class="num"><span class="pos">✓ ${int(r.sent)}</span> · <span class="amb">🚫 ${int(r.blocked)}</span> · <span class="neg">✕ ${int(r.failed)}</span></td>
+        <td><span class="chip ${chip}">${r.status}</span> ${r.status === 'sending' ? `<button class="xbtn" data-c="${esc(r.id)}">Stop</button>` : ''}</td></tr>`
+    }).join('')}</tbody></table></div>` : '<p class="empty">No announcements yet.</p>'
+    $$('[data-c]', box).forEach((b) => { b.onclick = async () => { try { await api('/announce_cancel/' + b.dataset.c, { method: 'POST' }); toast('Stopping…'); loadAnnHistory() } catch (e) { if (e.message !== 'login') toast(e.message) } } })
+    if (j.rows.some((r) => r.status === 'sending')) annTimer = setTimeout(() => { if (S.page === 'announce') loadAnnHistory() }, 2500)
+  } catch (e) { if (e.message !== 'login') box.innerHTML = `<p class="empty">${esc(e.message)}</p>` }
+}
+
 // ---------- csv ----------
 function csv(name, rows) {
   const body = rows.map((r) => r.map((v) => { const s = String(v ?? ''); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + s.replace(/"/g, '""').replace(/^([=+\-@])/, "'$1") + '"' : s }).join(',')).join('\n')
@@ -509,6 +640,6 @@ async function boot() {
   go('overview')
   await refresh()
   clearInterval(S.timer)
-  S.timer = setInterval(() => { if (!document.hidden && S.page !== 'expenses') refresh() }, 60000)
+  S.timer = setInterval(() => { if (!document.hidden && S.page !== 'expenses' && S.page !== 'announce') refresh() }, 60000)
 }
 boot()

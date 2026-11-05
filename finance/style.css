@@ -183,3 +183,25 @@ h4.sec { margin: 22px 0 8px; font-size: 13px; color: var(--muted); text-transfor
 .dotb { width: 10px; height: 10px; border-radius: 4px; flex: none; display: inline-block; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+/* ---------- announcements ---------- */
+textarea.in { resize: vertical; min-height: 120px; line-height: 1.5; font-family: inherit; }
+select.in { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 20px) 55%, calc(100% - 14px) 55%; background-size: 6px 6px; background-repeat: no-repeat; padding-right: 36px; }
+.ann .card > .in { display: block; }
+.drop { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px; border: 1.5px dashed rgba(255,255,255,.28); background: rgba(8,12,28,.4); cursor: pointer; transition: border-color .15s, background .15s; }
+.drop:hover, .drop.over, .drop:focus-visible { border-color: var(--green); background: rgba(46,230,166,.07); }
+.drop img { width: 64px; height: 64px; object-fit: cover; border-radius: 12px; flex: none; }
+.drop b { display: block; } .drop small { color: var(--faint); }
+.drop .xbtn { margin-left: auto; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+.actions .btn { flex: 1; }
+.phone { margin-top: 12px; padding: 18px; border-radius: 22px; background: #0e1621 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='10' cy='10' r='2' fill='%23ffffff10'/%3E%3Ccircle cx='40' cy='34' r='3' fill='%23ffffff0c'/%3E%3C/svg%3E"); border: 1px solid var(--line); }
+.bubble { max-width: 340px; background: #182533; border-radius: 16px 16px 16px 4px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.bubble img { display: block; width: 100%; max-height: 380px; object-fit: cover; }
+.bubble .cap { padding: 10px 12px 2px; white-space: pre-wrap; word-break: break-word; font-size: 14.5px; line-height: 1.45; }
+.bubble .lnk { color: #6ab3f3; }
+.bubble .time { text-align: right; padding: 0 10px 6px; font-size: 11px; color: #6d7f91; }
+.tbtn { max-width: 340px; margin-top: 4px; padding: 10px; text-align: center; border-radius: 12px; background: rgba(23,33,43,.9); color: #6ab3f3; font-weight: 600; font-size: 14px; }
+.bar2 { height: 8px; border-radius: 999px; background: var(--card2); overflow: hidden; margin-bottom: 4px; } .bar2 div { height: 100%; background: linear-gradient(90deg, var(--violet), var(--green)); transition: width .4s; }
+
+@media (max-width: 520px) { .nav button { font-size: 10px; padding: 8px 2px; } }

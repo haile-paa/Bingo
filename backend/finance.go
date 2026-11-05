@@ -116,7 +116,9 @@ func registerFinance(r *gin.Engine) {
 		http.SetCookie(c.Writer, &http.Cookie{Name: finCookie, Value: "", Path: "/finance", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		c.JSON(200, gin.H{"ok": true})
 	})
-	auth.GET("/me", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true, "phone": finPhone[:3] + "****" + finPhone[len(finPhone)-3:]}) })
+	auth.GET("/me", func(c *gin.Context) {
+		c.JSON(200, gin.H{"ok": true, "phone": finPhone[:3] + "****" + finPhone[len(finPhone)-3:]})
+	})
 	auth.GET("/summary", finSummary)
 	auth.GET("/people", finPeople)
 	auth.GET("/people/:id", finPerson)
@@ -125,6 +127,12 @@ func registerFinance(r *gin.Engine) {
 	auth.GET("/expenses", finExpenses)
 	auth.POST("/expenses", finAddExpense)
 	auth.DELETE("/expenses/:id", finDelExpense)
+	auth.GET("/announce/info", annInfo)
+	auth.GET("/announce/audience", annAudience)
+	auth.GET("/announce", annList)
+	auth.POST("/announce/send", annSend)
+	auth.POST("/announce_cancel/:id", annCancelH)
+	annRecover()
 	log.Println("finance dashboard is ON at /finance")
 }
 
@@ -455,9 +463,9 @@ func finSummary(c *gin.Context) {
 			"users": usersN, "registered": regN, "online": onlineTotal(),
 			"mainWallets": mainSum, "playWallets": playSum,
 			"depositsAllTime": depAll, "withdrawnAllTime": wdAll, "expensesAllTime": expAll,
-			"pendingDeposits": gin.H{"amount": pendDepSum, "count": pendDepN},
+			"pendingDeposits":    gin.H{"amount": pendDepSum, "count": pendDepN},
 			"pendingWithdrawals": gin.H{"amount": pendWdSum, "count": pendWdN},
-			"cashbackOwed": cashbackOwed,
+			"cashbackOwed":       cashbackOwed,
 		},
 	})
 }

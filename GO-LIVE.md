@@ -41,3 +41,10 @@ Do NOT set `DEV`. Generate random values with: `openssl rand -hex 24`
 
 ## 6. If the server restarts during a round
 Every paid cartela is also saved in the database. If the server stops mid-round, a cleanup job (runs every minute) gives those stakes back after about 6 minutes and sends the player a Telegram message. Prizes are never refunded this way once a round has finished.
+
+## 7. Announcements (`/finance` -> Announce)
+- Upload a poster (JPG/PNG up to 5 MB), write the description (up to 1000 characters with a poster, 4000 without) and add an optional button (Play opens the game, or any https link).
+- Choose who gets it: all registered players, players who deposited, players not active for 7 days, or only you (test).
+- Test first: your owner phone number (`OWNER_PHONE`) must be registered in the bot to receive the test.
+- It is sent about 18 messages a second, with a progress bar. Press Stop to cancel. Only one announcement can send at a time, and at most 8 per hour.
+- People who blocked the bot show as "blocked". Send announcements sparingly: too many may make players block the bot.
