@@ -135,6 +135,8 @@ func registerFinance(r *gin.Engine) {
 	auth.GET("/maintenance", finMaintGet)
 	auth.GET("/maintenance/image", finMaintImage)
 	auth.POST("/maintenance", finMaintSet)
+	auth.GET("/bots", finBotsGet)
+	auth.POST("/bots", finBotsSet)
 	annRecover()
 	log.Println("finance dashboard is ON at /finance")
 }

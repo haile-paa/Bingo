@@ -32,10 +32,11 @@ const ICONS = {
   cash: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/><circle cx="16.5" cy="15" r="1.2"/>',
   expenses: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
   maintenance: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+  bots: '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 16.5h6"/>',
   announce: '<path d="M3 11v2a1 1 0 0 0 1 1h2l6 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M16 8a5 5 0 0 1 0 8"/><path d="M19 5a9 9 0 0 1 0 14"/>',
 }
 const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`
-const PAGES = [['overview', 'Overview'], ['revenue', 'Revenue'], ['people', 'People'], ['cash', 'Cash'], ['expenses', 'Expenses'], ['announce', 'Announce', 'Announcements'], ['maintenance', 'Maint.', 'Maintenance']]
+const PAGES = [['overview', 'Overview'], ['revenue', 'Revenue'], ['people', 'People'], ['cash', 'Cash'], ['expenses', 'Expenses'], ['announce', 'Announce', 'Announcements'], ['bots', 'Bots', 'Bots (house players)'], ['maintenance', 'Maint.', 'Maintenance']]
 const KINDS = {
   entry: ['Bet', 'v'], win: ['Prize won', 'g'], deposit: ['Deposit', 'b'], withdraw: ['Withdraw request', 'a'],
   refund: ['Refund', 'a'], signup_bonus: ['Signup bonus', 'v'], referral: ['Invite reward', 'v'], cashback: ['Cashback', 'v'],
@@ -217,7 +218,7 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 function renderTop() {
   const pg = PAGES.find((p) => p[0] === S.page)
   const title = pg[2] || pg[1]
-  const showRange = S.page !== 'cash' && S.page !== 'announce' && S.page !== 'maintenance'
+  const showRange = S.page !== 'cash' && S.page !== 'announce' && S.page !== 'maintenance' && S.page !== 'bots'
   $('#top').innerHTML = `<h2>${title}</h2><div class="grow"></div>` + (showRange ? `
     <div class="chips" id="chips">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, 'Year']].map(([n, l]) => `<button data-n="${n}" class="${S.preset === n ? 'on' : ''}">${l}</button>`).join('')}<button data-n="0" class="${S.preset === 0 ? 'on' : ''}">Custom</button></div>
     ${S.preset === 0 ? `<div class="dates"><input class="in" type="date" id="df" value="${S.from}" max="${today()}"> to <input class="in" type="date" id="dt" value="${S.to}" max="${today()}"></div>` : ''}` : '')
@@ -255,7 +256,8 @@ async function refresh(manual) {
 function renderPage() {
   if (!S.cur) return
   if (S.page === 'maintenance' && $('#mstat')) return // keep what is typed in the form
-  const fn = { overview: viewOverview, revenue: viewRevenue, people: viewPeople, cash: viewCash, expenses: viewExpenses, announce: viewAnnounce, maintenance: viewMaintenance }[S.page]
+  if (S.page === 'bots' && $('#bstat')) return
+  const fn = { overview: viewOverview, revenue: viewRevenue, people: viewPeople, cash: viewCash, expenses: viewExpenses, announce: viewAnnounce, maintenance: viewMaintenance, bots: viewBots }[S.page]
   fn()
   const st = $('#stamp'); if (st) st.textContent = 'Updated ' + new Date(S.stamp).toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
 }
@@ -728,6 +730,60 @@ async function viewMaintenance() {
   $('#msave').onclick = () => submit(M.on)
   stat(); drop(); prev()
   mtTimer = setInterval(() => { if (S.page !== 'maintenance' || !$('#mpv')) { clearInterval(mtTimer); return } prev() }, 1000)
+}
+
+// ---------- bots (clearly labeled house players) ----------
+const B = { loaded: false, rooms: {}, live: {}, max: 299 }
+let bTimer = null
+
+async function viewBots() {
+  clearInterval(bTimer)
+  if (!B.loaded) {
+    $('#view').innerHTML = '<div class="skel" style="height:300px"></div>'
+    try { Object.assign(B, await api('/bots'), { loaded: true }) } catch (e) { if (e.message !== 'login') $('#view').innerHTML = `<div class="card glass empty">${esc(e.message)}</div>`; return }
+  }
+  const stakes = Object.keys(B.rooms).sort((a, b) => a - b)
+  $('#view').innerHTML = `
+  <section class="card glass" id="bstat"><h3>Bots help fill the room</h3>
+    <p class="note">Bots hold numbers so a new room does not look empty. <b>Every bot is shown to players with a 🤖 badge</b> (number picker and winner screen), and the draw is a fair random draw for everybody. Bots take their numbers at random moments during the first 25 seconds; real players can pick any free number for the whole 30 seconds. Bots cost nothing and are never paid from player money. The prize pool is always calculated from real stakes only. Changes apply from the next round.</p>
+  </section>
+  <div class="grid two eq" style="margin-top:16px">${stakes.map((k) => `
+    <section class="card glass" data-k="${k}"><h3>${k} birr room <small id="bl${k}"></small></h3>
+      <label class="f" for="bc${k}">Cartelas held by bots <span class="mut">(0 to ${B.max})</span></label>
+      <input class="in" id="bc${k}" type="number" min="0" max="${B.max}" step="1" value="${B.rooms[k].count || 0}">
+      <label class="f" style="display:flex;gap:10px;align-items:center;margin-top:14px"><input type="checkbox" id="bw${k}" ${B.rooms[k].canWin ? 'checked' : ''}> Bots can win <span class="mut">(off = bots only hold numbers. If on, a bot's share is not paid out.)</span></label>
+      <div class="actions" style="margin-top:16px">
+        <button class="btn" data-a="live" data-k="${k}">${B.rooms[k].on ? '💾 Save (bots stay live)' : '▶ Go live'}</button>
+        ${B.rooms[k].on ? `<button class="btn danger" data-a="off" data-k="${k}">⏹ Turn bots off</button>` : ''}
+      </div>
+      <p class="note" id="bs${k}"></p>
+    </section>`).join('')}
+  </div>`
+  const paint = () => stakes.forEach((k) => {
+    const l = B.live[k] || {}, on = B.rooms[k].on
+    $('#bl' + k).textContent = on ? '● bots LIVE' : '○ bots off'
+    $('#bs' + k).textContent = `Now: ${l.bots || 0} bot cartelas, ${l.real || 0} real cartelas of ${l.total || 0} (${l.phase || ''}).`
+  })
+  const save = async (k, on) => {
+    const count = Math.floor(Number($('#bc' + k).value))
+    if (!(count >= 0 && count <= B.max)) return toast('Enter a number from 0 to ' + B.max)
+    if (on && count === 0) return toast('Set how many cartelas the bots should hold')
+    const rooms = { [k]: { on, count, canWin: $('#bw' + k).checked } }
+    try {
+      Object.assign(B, await api('/bots', { method: 'POST', body: { rooms } }))
+      toast(on ? 'Bots are live from the next round' : 'Bots turned off')
+      viewBots()
+    } catch (e) { if (e.message !== 'login') toast(e.message) }
+  }
+  $('#view').onclick = (e) => {
+    const b = e.target.closest('button[data-a]'); if (!b) return
+    save(b.dataset.k, b.dataset.a === 'live')
+  }
+  paint()
+  bTimer = setInterval(async () => {
+    if (S.page !== 'bots' || !$('#bstat')) { clearInterval(bTimer); return }
+    try { Object.assign(B, await api('/bots')); paint() } catch (_) { /* ignore */ }
+  }, 3000)
 }
 
 // ---------- csv ----------

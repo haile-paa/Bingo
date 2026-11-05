@@ -23,7 +23,7 @@ const (
 	minDeposit    int64 = 1000
 	minWithdraw   int64 = 10000
 	signupBonus   int64 = 1000
-	refMinDeposit int64 = 1000  // an invited friend counts only after a first deposit of at least 50 birr (stops fake-account farming)
+	refMinDeposit int64 = 1000  // an invited friend counts only after a first deposit of at least 10 birr (stops fake-account farming)
 	referralBonus int64 = 1000  // per invited friend whose first deposit is approved (set 0 to turn off)
 	inviteGoal    int64 = 20    // every 20 such friends ...
 	inviteReward  int64 = 15000 // ... pay 150 birr into the play wallet

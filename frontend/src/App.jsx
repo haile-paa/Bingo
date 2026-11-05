@@ -351,14 +351,23 @@ function useGame(stake) {
           setG((p) => {
             if (!p) return p;
             const t = new Set(p.taken);
+            const b = new Set(p.bots || []);
             for (const s of m.list) {
-              if (s.on) t.add(s.n);
-              else t.delete(s.n);
+              if (s.on) {
+                t.add(s.n);
+                if (s.bot) b.add(s.n);
+              } else {
+                t.delete(s.n);
+                b.delete(s.n);
+              }
             }
-            return { ...p, prize: m.prize, taken: [...t] };
+            return { ...p, prize: m.prize, taken: [...t], bots: [...b] };
           });
         } else if (m.type === "sync") {
-          setG((p) => p && { ...p, prize: m.prize, taken: m.taken });
+          setG(
+            (p) =>
+              p && { ...p, prize: m.prize, taken: m.taken, bots: m.bots || [] },
+          );
         } else if (m.type === "call") {
           setG((p) => p && { ...p, phase: "run", called: m.called });
         } else if (m.type === "error") {
@@ -579,6 +588,7 @@ function Pick({ g, me, toggle, now, onBack, onRefresh }) {
   const left = Math.max(0, Math.ceil((g.deadline - now) / 1000));
   const grid = useMemo(() => {
     const taken = new Set(g.taken);
+    const bots = new Set(g.bots || []);
     const mine = new Set(g.mine);
     return Array.from({ length: g.total }, (_, i) => i + 1).map((n) => {
       const isMine = mine.has(n);
@@ -589,13 +599,19 @@ function Pick({ g, me, toggle, now, onBack, onRefresh }) {
           onClick={() => toggle(n)}
           disabled={other}
           aria-pressed={isMine}
-          className={`h-10 rounded-lg border text-sm font-bold tabular-nums ${isMine ? "border-called bg-called text-white" : other ? "border-orange-500 bg-orange-600 text-white" : "border-white/25 bg-white/10 text-white"}`}
+          className={`relative h-10 rounded-lg border text-sm font-bold tabular-nums ${isMine ? "border-called bg-called text-white" : bots.has(n) ? "border-sky-400 bg-sky-700 text-white" : other ? "border-orange-500 bg-orange-600 text-white" : "border-white/25 bg-white/10 text-white"}`}
         >
           {n}
+          {bots.has(n) && !isMine && (
+            <span
+              className='absolute -right-0.5 -top-1 text-[9px] leading-none'
+              aria-label=''
+            ></span>
+          )}
         </button>
       );
     });
-  }, [g.taken, g.mine, g.total, toggle]);
+  }, [g.taken, g.bots, g.mine, g.total, toggle]);
 
   return (
     <>
@@ -635,6 +651,7 @@ function Pick({ g, me, toggle, now, onBack, onRefresh }) {
         {t("legendMine")}
         <i className='ml-3 inline-block size-3 rounded bg-orange-600' />{" "}
         {t("legendTaken")}
+        <i className='ml-3 inline-block size-3 rounded bg-sky-700' />
       </p>
     </>
   );

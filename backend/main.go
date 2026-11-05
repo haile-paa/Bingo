@@ -161,6 +161,7 @@ func main() {
 	ensureIndexes(ctx)
 
 	startMaintenance()
+	startBots()
 	startBG()
 	startGames()
 	go startSpotJanitor()

@@ -43,6 +43,7 @@ func init() {
 type Spot struct {
 	UID     int64
 	Bonus   bool   // paid from the play-only bonus wallet
+	Bot     bool   // house bot: shown to players with a BOT badge, pays nothing
 	Pending bool   // reserved, payment still in progress (not part of the round yet)
 	Tok     string // unique id of this purchase
 }
@@ -52,6 +53,7 @@ type WinnerOut struct {
 	UID     int64     `json:"uid"`
 	Name    string    `json:"name"`
 	Phone   string    `json:"phone"`
+	Bot     bool      `json:"bot"`
 	Share   int64     `json:"share"`
 	Card    [5][5]int `json:"card"`
 }
@@ -82,6 +84,7 @@ type Game struct {
 	called   []int
 	marked   [76]bool
 	result   *Result
+	botWin   bool // bots can win this round (setting at the start of the round)
 	clients  map[*Client]struct{}
 }
 
@@ -114,7 +117,7 @@ func roomsHandler(c *gin.Context) {
 		g := games[st]
 		g.mu.Lock()
 		out = append(out, gin.H{"stake": st, "fee": g.fee, "phase": g.phase, "round": g.round,
-			"players": len(g.spots), "prize": g.prizePool(len(g.spots)), "total": totalSpots})
+			"players": len(g.spots), "bots": len(g.botList()), "prize": g.prizePool(g.nReal()), "total": totalSpots})
 		g.mu.Unlock()
 	}
 	c.JSON(200, out)
@@ -236,7 +239,7 @@ func (g *Game) stateFor(uid int64) gin.H {
 	taken := g.takenList()
 	mine, cards := g.mineOf(uid)
 	return gin.H{"type": "state", "phase": g.phase, "round": g.round, "gid": g.gid, "deadline": g.deadline.UnixMilli(),
-		"taken": taken, "mine": mine, "cards": cards, "prize": g.prizePool(g.nSpots()), "fee": g.fee,
+		"taken": taken, "bots": g.botList(), "mine": mine, "cards": cards, "prize": g.prizePool(g.nReal()), "fee": g.fee,
 		"total": totalSpots, "called": g.called, "result": g.result,
 		"cfg": gin.H{"pick": int(pickTime / time.Second), "call": int(callEvery / time.Second),
 			"max": maxPerUser, "min": minSpots, "pct": payoutPercent}}
@@ -361,11 +364,11 @@ func (g *Game) flushLoop() {
 		tick++
 		g.mu.Lock()
 		if len(g.dirty) > 0 {
-			g.pushAll(gin.H{"type": "spots", "list": g.dirty, "prize": g.prizePool(g.nSpots())})
+			g.pushAll(gin.H{"type": "spots", "list": g.dirty, "prize": g.prizePool(g.nReal())})
 			g.dirty = nil
 		}
 		if tick%20 == 0 && g.phase == "pick" {
-			g.pushAll(gin.H{"type": "sync", "taken": g.takenList(), "prize": g.prizePool(g.nSpots())})
+			g.pushAll(gin.H{"type": "sync", "taken": g.takenList(), "bots": g.botList(), "prize": g.prizePool(g.nReal())})
 		}
 		g.mu.Unlock()
 	}
@@ -386,13 +389,18 @@ func (g *Game) pick() {
 	g.phase, g.deadline, g.result = "pick", time.Now().Add(pickTime), nil
 	g.spots, g.called, g.dirty = map[int]Spot{}, []int{}, nil
 	g.marked = [76]bool{}
+	stake := int(g.fee / 100)
+	bs := botSettings(stake)
+	g.botWin = bs.On && bs.CanWin
+	gid := g.gid
 	g.pushState()
 	g.mu.Unlock()
+	go g.fillBots(gid, stake)
 	for {
 		time.Sleep(time.Second)
 		g.mu.Lock()
 		due := time.Now().After(g.deadline)
-		ready := due && g.nSpots() >= minSpots
+		ready := due && g.nSpots() >= minSpots && (len(g.botList()) == 0 || g.nReal() >= 1)
 		if due && !ready { // not enough cartelas yet: keep the picks and wait another round of time
 			g.deadline = time.Now().Add(pickTime)
 			g.pushState()
@@ -406,7 +414,10 @@ func (g *Game) pick() {
 
 func (g *Game) winningSpots() []int {
 	var out []int
-	for n := range g.spots {
+	for n, s := range g.spots {
+		if s.Bot && !g.botWin {
+			continue // bots only hold numbers unless the owner allowed them to win
+		}
 		if hasBingo(cartelas[n], &g.marked) {
 			out = append(out, n)
 		}
@@ -424,7 +435,7 @@ func (g *Game) play() {
 			delete(g.spots, n)
 		}
 	}
-	prize := g.prizePool(len(g.spots))
+	prize := g.prizePool(g.nReal())
 	g.pushState()
 	g.mu.Unlock()
 
@@ -467,6 +478,9 @@ func (g *Game) finish(wins []int, prize int64) {
 	res := &Result{Winners: []WinnerOut{}}
 	if len(wins) == 0 { // nobody got bingo: give every stake back
 		for n, s := range spots {
+			if s.Bot {
+				continue
+			}
 			refundSpot(ctx, s, n, g.fee)
 		}
 	} else {
@@ -477,6 +491,10 @@ func (g *Game) finish(wins []int, prize int64) {
 		won := map[int64]int64{} // stake money of the winning cartelas, removed from the weekly cashback
 		for _, n := range wins {
 			uid := spots[n].UID
+			if spots[n].Bot { // a bot won: name carries the robot icon; its share is shown but NOT paid out (stays with the house)
+				res.Winners = append(res.Winners, WinnerOut{Cartela: n, UID: uid, Name: botName(uid), Phone: botPhone(), Bot: true, Share: share, Card: cartelas[n]})
+				continue
+			}
 			u, err := loadUser(ctx, uid)
 			if err != nil {
 				log.Println("winner lookup:", uid, err)
