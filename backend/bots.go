@@ -30,8 +30,33 @@ const botFillWindow = 25 * time.Second // bots finish taking their numbers insid
 
 type botRoom struct {
 	On     bool `bson:"on" json:"on"`
-	Count  int  `bson:"count" json:"count"`   // how many cartelas the bots hold
+	Count  int  `bson:"count" json:"count"`   // how many cartelas the bots hold (used when Plan is empty)
 	CanWin bool `bson:"canWin" json:"canWin"` // default false
+	// Plan is the bot count for each game in order, e.g. [200 150 180 100]. After the last number it starts again
+	// from the first. Empty = every game uses Count.
+	Plan []int `bson:"plan" json:"plan"`
+	// PlanFrom is the round number the plan started after (set by the server when the plan is saved), so the
+	// first game after saving always uses the first number.
+	PlanFrom int64 `bson:"planFrom" json:"planFrom"`
+}
+
+// targetFor returns how many cartelas the bots should hold in the given round.
+func (r botRoom) targetFor(round int64) int {
+	t := r.Count
+	if len(r.Plan) > 0 {
+		i := int(round - r.PlanFrom - 1)
+		if i < 0 {
+			i = 0
+		}
+		t = r.Plan[i%len(r.Plan)]
+	}
+	if t > totalSpots-1 {
+		t = totalSpots - 1
+	}
+	if t < 0 {
+		t = 0
+	}
+	return t
 }
 
 type botsDoc struct {
@@ -82,9 +107,13 @@ func startBots() {
 
 // ---- names shown with the BOT badge ----
 
-var botFirst = []string{"Abebe", "Kebede", "Tigist", "Almaz", "Dawit", "Selam", "Mulugeta", "Hana", "Yonas", "Meron",
-	"Bereket", "Tsion", "Henok", "Rahel", "Samuel", "Eden", "Biniam", "Marta", "Fikru", "Lemlem",
-	"Getachew", "Birtukan", "Tesfaye", "Senait", "Mekonnen", "Aster", "Habtamu", "Genet", "Solomon", "Betty"}
+var botFirst = []string{"Abebe", "Kebede", "Dawit", "Mulugeta", "Yonas", "Bereket", "Henok", "Samuel", "Biniam", "Fikru",
+	"Getachew", "Tesfaye", "Mekonnen", "Habtamu", "Solomon", "Abel", "Amanuel", "Anteneh", "Ayele", "Berhanu",
+	"Daniel", "Eyob", "Eyasu", "Fasil", "Fitsum", "Gashaw", "Girum", "Habte", "Hailu", "Isayas",
+	"Kidus", "Leul", "Mesfin", "Michael", "Million", "Mikiyas", "Nahom", "Natnael", "Nebiyu", "Robel",
+	"Samson", "Sisay", "Surafel", "Tamrat", "Teklu", "Temesgen", "Tewodros", "Wondwosen", "Yared", "Yohannes",
+	"Zelalem", "Zerihun", "Endalkachew", "Alemayehu", "Dagim", "Elias", "Ephrem", "Girmay", "Kaleb", "Kirubel",
+	"Mulat", "Tariku", "Yeabsira"}
 var botLast = []string{"Tadesse", "Bekele", "Alemu", "Haile", "Girma", "Assefa", "Worku", "Mengistu", "Desta", "Gebre",
 	"Negash", "Lemma", "Teshome", "Abera", "Kassa", "Demissie", "Wolde", "Tilahun", "Mamo", "Shiferaw"}
 
@@ -186,7 +215,9 @@ func finBotsGet(c *gin.Context) {
 		rooms[strconv.Itoa(st)] = botSettings(st)
 		g := games[st]
 		g.mu.Lock()
-		live[strconv.Itoa(st)] = gin.H{"phase": g.phase, "bots": len(g.botList()), "real": g.nReal(), "total": totalSpots}
+		bs := botSettings(st)
+		live[strconv.Itoa(st)] = gin.H{"phase": g.phase, "bots": len(g.botList()), "real": g.nReal(), "total": totalSpots,
+			"target": bs.targetFor(g.round), "next": bs.targetFor(g.round + 1), "round": g.round}
 		g.mu.Unlock()
 	}
 	c.JSON(200, gin.H{"rooms": rooms, "live": live, "max": totalSpots - 1})
@@ -211,6 +242,31 @@ func finBotsSet(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Bot count for " + k + " birr must be between 0 and " + strconv.Itoa(totalSpots-1)})
 			return
 		}
+		if len(r.Plan) > 50 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "The list for " + k + " birr can have at most 50 numbers"})
+			return
+		}
+		for _, n := range r.Plan {
+			if n < 0 || n > totalSpots-1 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Every bot number for " + k + " birr must be between 0 and " + strconv.Itoa(totalSpots-1)})
+				return
+			}
+		}
+		// the first game after saving a new list uses its first number
+		old := botSettings(st)
+		if len(r.Plan) == 0 {
+			r.PlanFrom = 0
+		} else if !samePlan(old.Plan, r.Plan) {
+			g := games[st]
+			g.mu.Lock()
+			r.PlanFrom = g.round
+			if g.phase == "pick" { // the round that is being filled right now counts as the first game
+				r.PlanFrom--
+			}
+			g.mu.Unlock()
+		} else {
+			r.PlanFrom = old.PlanFrom
+		}
 		out[k] = r
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
@@ -224,6 +280,18 @@ func finBotsSet(c *gin.Context) {
 	}
 	botCfg.Store(&botsDoc{ID: "bots", Rooms: out})
 	finBotsGet(c) // applies from the NEXT round
+}
+
+func samePlan(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // botPhone is a random masked number in the same look as real winners (09*****1404) with the robot icon at the end.

@@ -751,6 +751,8 @@ async function viewBots() {
     <section class="card glass" data-k="${k}"><h3>${k} birr room <small id="bl${k}"></small></h3>
       <label class="f" for="bc${k}">Cartelas held by bots <span class="mut">(0 to ${B.max})</span></label>
       <input class="in" id="bc${k}" type="number" min="0" max="${B.max}" step="1" value="${B.rooms[k].count || 0}">
+      <label class="f" for="bp${k}" style="margin-top:14px">Different number every game <span class="mut">(optional, separate with commas, e.g. 200, 150, 180, 100. Game 1 uses the first number, game 2 the second, and after the last it starts again. Leave empty to use the fixed number above.)</span></label>
+      <input class="in" id="bp${k}" type="text" inputmode="numeric" placeholder="200, 150, 180, 100" value="${((B.rooms[k].plan) || []).join(', ')}">
       <label class="f" style="display:flex;gap:10px;align-items:center;margin-top:14px"><input type="checkbox" id="bw${k}" ${B.rooms[k].canWin ? 'checked' : ''}> Bots can win <span class="mut">(off = bots only hold numbers. If on, a bot's share is not paid out.)</span></label>
       <div class="actions" style="margin-top:16px">
         <button class="btn" data-a="live" data-k="${k}">${B.rooms[k].on ? '💾 Save (bots stay live)' : '▶ Go live'}</button>
@@ -762,13 +764,19 @@ async function viewBots() {
   const paint = () => stakes.forEach((k) => {
     const l = B.live[k] || {}, on = B.rooms[k].on
     $('#bl' + k).textContent = on ? '● bots LIVE' : '○ bots off'
-    $('#bs' + k).textContent = `Now: ${l.bots || 0} bot cartelas, ${l.real || 0} real cartelas of ${l.total || 0} (${l.phase || ''}).`
+    const hasPlan = (B.rooms[k].plan || []).length > 0
+    $('#bs' + k).textContent = `Now: ${l.bots || 0} bot cartelas, ${l.real || 0} real cartelas of ${l.total || 0} (${l.phase || ''}).` +
+      (on && hasPlan ? ` This game: ${l.phase === 'pick' ? l.target : '—'} bots · next game: ${l.next} bots.` : '')
   })
   const save = async (k, on) => {
     const count = Math.floor(Number($('#bc' + k).value))
     if (!(count >= 0 && count <= B.max)) return toast('Enter a number from 0 to ' + B.max)
-    if (on && count === 0) return toast('Set how many cartelas the bots should hold')
-    const rooms = { [k]: { on, count, canWin: $('#bw' + k).checked } }
+    const raw = $('#bp' + k).value.trim()
+    const plan = raw ? raw.split(/[\s,;]+/).filter(Boolean).map(Number) : []
+    if (plan.some((n) => !Number.isInteger(n) || n < 0 || n > B.max)) return toast('Every number in the list must be a whole number from 0 to ' + B.max)
+    if (plan.length > 50) return toast('The list can have at most 50 numbers')
+    if (on && count === 0 && plan.length === 0) return toast('Set how many cartelas the bots should hold')
+    const rooms = { [k]: { on, count, plan, canWin: $('#bw' + k).checked } }
     try {
       Object.assign(B, await api('/bots', { method: 'POST', body: { rooms } }))
       toast(on ? 'Bots are live from the next round' : 'Bots turned off')

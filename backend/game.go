@@ -405,10 +405,7 @@ func (g *Game) pick() {
 		cur := botSettings(stake) // checked every second, so switching bots on in /finance works at once
 		g.botWin = cur.On && cur.CanWin
 		if cur.On && !g.botFilling {
-			target := cur.Count
-			if target > totalSpots-1 {
-				target = totalSpots - 1
-			}
+			target := cur.targetFor(g.round) // the list of numbers (200, 150, 180, ...) moves on every game
 			if need := target - len(g.botList()); need > 0 {
 				g.botFilling = true
 				go g.fillBots(gid, stake, need)
