@@ -8,7 +8,7 @@
 //   - bots are free for the house: no stake is taken and no wallet exists for them
 //   - the draw is the same fair random draw for everybody. "Bots can win" is OFF by default: with it OFF the bots only
 //     hold numbers; with it ON a bot can win like any cartela, and a bot's share is NOT paid out (it stays with the house).
-//   - the prize pool is always calculated from REAL stakes only.
+//   - the prize pool is calculated from ALL held cartelas (bots + real players), live as cartelas are taken. A bot cartela adds to the prize but costs no player anything: if a real player wins, the house pays the bot part.
 package main
 
 import (

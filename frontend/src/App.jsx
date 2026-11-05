@@ -599,7 +599,7 @@ function Pick({ g, me, toggle, now, onBack, onRefresh }) {
           onClick={() => toggle(n)}
           disabled={other}
           aria-pressed={isMine}
-          className={`relative h-10 rounded-lg border text-sm font-bold tabular-nums ${isMine ? "border-called bg-called text-white" : bots.has(n) ? "border-sky-400 bg-sky-700 text-white" : other ? "border-orange-500 bg-orange-600 text-white" : "border-white/25 bg-white/10 text-white"}`}
+          className={`relative h-10 rounded-lg border text-sm font-bold tabular-nums ${isMine ? "border-called bg-called text-white" : bots.has(n) ? "border-red-400 bg-red-600 text-white" : other ? "border-red-500 bg-red-600 text-white" : "border-white/25 bg-white/10 text-white"}`}
         >
           {n}
           {bots.has(n) && !isMine && (
@@ -649,9 +649,9 @@ function Pick({ g, me, toggle, now, onBack, onRefresh }) {
       <p className='mt-2 flex items-center gap-2 text-xs text-white/70'>
         <i className='inline-block size-3 rounded bg-called' />{" "}
         {t("legendMine")}
-        <i className='ml-3 inline-block size-3 rounded bg-orange-600' />{" "}
+        <i className='ml-3 inline-block size-3 rounded bg-red-600' />{" "}
         {t("legendTaken")}
-        <i className='ml-3 inline-block size-3 rounded bg-sky-700' />
+        <i className='ml-3 inline-block size-3 rounded bg-red-600' />
       </p>
     </>
   );

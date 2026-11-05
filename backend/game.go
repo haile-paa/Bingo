@@ -119,7 +119,7 @@ func roomsHandler(c *gin.Context) {
 		g := games[st]
 		g.mu.Lock()
 		out = append(out, gin.H{"stake": st, "fee": g.fee, "phase": g.phase, "round": g.round,
-			"players": len(g.spots), "bots": len(g.botList()), "prize": g.prizePool(g.nReal()), "total": totalSpots})
+			"players": len(g.spots), "bots": len(g.botList()), "prize": g.prizePool(g.nSpots()), "total": totalSpots})
 		g.mu.Unlock()
 	}
 	c.JSON(200, out)
@@ -174,7 +174,8 @@ func hasBingo(card [5][5]int, m *[76]bool) bool {
 	return d1 || d2
 }
 
-// prizePool: players get payoutPercent (80%) of all stakes paid in; the company keeps the rest (20%).
+// prizePool: payoutPercent (80%) of the stake of EVERY held cartela, bots and real players alike (n = g.nSpots()).
+// It is live: it grows with each cartela taken. A bot cartela adds to the prize but takes no money from any player.
 func (g *Game) prizePool(n int) int64 { return int64(n) * g.fee * payoutPercent / 100 }
 
 // --- messaging (callers hold g.mu) ---
@@ -241,7 +242,7 @@ func (g *Game) stateFor(uid int64) gin.H {
 	taken := g.takenList()
 	mine, cards := g.mineOf(uid)
 	return gin.H{"type": "state", "phase": g.phase, "round": g.round, "gid": g.gid, "deadline": g.deadline.UnixMilli(),
-		"taken": taken, "bots": g.botList(), "mine": mine, "cards": cards, "prize": g.prizePool(g.nReal()), "fee": g.fee,
+		"taken": taken, "bots": g.botList(), "mine": mine, "cards": cards, "prize": g.prizePool(g.nSpots()), "fee": g.fee,
 		"total": totalSpots, "called": g.called, "result": g.result,
 		"cfg": gin.H{"pick": int(pickTime / time.Second), "call": int(callEvery / time.Second),
 			"max": maxPerUser, "min": minSpots, "pct": payoutPercent}}
@@ -366,11 +367,11 @@ func (g *Game) flushLoop() {
 		tick++
 		g.mu.Lock()
 		if len(g.dirty) > 0 {
-			g.pushAll(gin.H{"type": "spots", "list": g.dirty, "prize": g.prizePool(g.nReal())})
+			g.pushAll(gin.H{"type": "spots", "list": g.dirty, "prize": g.prizePool(g.nSpots())})
 			g.dirty = nil
 		}
 		if tick%20 == 0 && g.phase == "pick" {
-			g.pushAll(gin.H{"type": "sync", "taken": g.takenList(), "bots": g.botList(), "prize": g.prizePool(g.nReal())})
+			g.pushAll(gin.H{"type": "sync", "taken": g.takenList(), "bots": g.botList(), "prize": g.prizePool(g.nSpots())})
 		}
 		g.mu.Unlock()
 	}
@@ -448,7 +449,7 @@ func (g *Game) play() {
 			delete(g.spots, n)
 		}
 	}
-	prize := g.prizePool(g.nReal())
+	prize := g.prizePool(g.nSpots())
 	g.pushState()
 	g.mu.Unlock()
 

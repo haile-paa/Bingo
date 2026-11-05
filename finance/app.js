@@ -745,7 +745,7 @@ async function viewBots() {
   const stakes = Object.keys(B.rooms).sort((a, b) => a - b)
   $('#view').innerHTML = `
   <section class="card glass" id="bstat"><h3>Bots help fill the room</h3>
-    <p class="note">Bots hold numbers so a new room does not look empty. <b>Every bot is shown to players with a 🤖 badge</b> (number picker and winner screen), and the draw is a fair random draw for everybody. Bots take their numbers at random moments during the first 25 seconds; real players can pick any free number for the whole 30 seconds. Bots cost nothing and are never paid from player money. The prize pool is always calculated from real stakes only. Changes apply from the next round.</p>
+    <p class="note">Bots hold numbers so a new room does not look empty. <b>Every bot is shown to players with a 🤖 badge</b> (number picker and winner screen), and the draw is a fair random draw for everybody. Bots take their numbers at random moments during the first 25 seconds; real players can pick any free number for the whole 30 seconds. Bots take no stake from any player. The prize pool counts every held cartela (bots and real players) live; a bot cartela adds to the prize, and if a real player wins, the house pays that part. Bot cartelas show in red. Changes apply from the next round.</p>
   </section>
   <div class="grid two eq" style="margin-top:16px">${stakes.map((k) => `
     <section class="card glass" data-k="${k}"><h3>${k} birr room <small id="bl${k}"></small></h3>
