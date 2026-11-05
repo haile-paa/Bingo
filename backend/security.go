@@ -92,7 +92,7 @@ func securityHeaders() gin.HandlerFunc {
 // bodyLimit stops huge request bodies (the biggest legitimate body is a pasted SMS).
 func bodyLimit(n int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.URL.Path == "/finance/api/announce/send" { // posters are bigger; that handler sets its own limit
+		if p := c.Request.URL.Path; p == "/finance/api/announce/send" || p == "/finance/api/maintenance" { // posters are bigger; that handler sets its own limit
 			c.Next()
 			return
 		}

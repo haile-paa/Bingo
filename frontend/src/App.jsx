@@ -67,6 +67,14 @@ const DICT = {
     r3: "መስመር (አግድም፣ ቁልቁል ወይም ሰያፍ) የሞላ የመጀመሪያው ካርቴላ ያሸንፋል፤ አሸናፊ ሲገኝ ቁጥር መጥራት ይቆማል።",
     r4: "በእያንዳንዱ ጨዋታ {total} ቦታ አለ። ከተከፈለው ጠቅላላ ገንዘብ {pct}% ለአሸናፊ ይሰጣል፤ ቀሪው {cut}% የአገልግሎት ክፍያ ነው።",
     r5: "ሁለት ካርቴላ በአንድ ጊዜ ቢያሸንፉ ሽልማቱ እኩል ይካፈላል።",
+    mtDays: "ቀን",
+    mtHours: "ሰዓት",
+    mtMin: "ደቂቃ",
+    mtSec: "ሰከንድ",
+    mtSoon: "በቅርቡ እንመለሳለን…",
+    mtAlmost: "ልንጨርስ ነው… ገጹ በራሱ ይከፈታል",
+    mtBot: "ገንዘብ ማስገባት እና ሂሳብ ማየት በቦቱ ላይ ይቻላል።",
+    err_maintenance: "ጨዋታው ለጥገና ዝግ ነው።",
     err_closed: "መምረጫ ጊዜው አልፏል። ቀጣዩን ዙር ይጠብቁ።",
     err_taken: "ይህ ካርቴላ ተይዟል።",
     err_funds: "በቂ ሂሳብ የለዎትም። በቦቱ ውስጥ ገንዘብ ያስገቡ።",
@@ -173,6 +181,14 @@ const DICT = {
     r3: "The first cartela to complete a line (row, column or diagonal) wins. Calling stops as soon as there is a winner.",
     r4: "Each game has {total} spots. Winners get {pct}% of all stakes paid in; the other {cut}% is the service fee.",
     r5: "If several cartelas win together the prize is split equally.",
+    mtDays: "Days",
+    mtHours: "Hours",
+    mtMin: "Min",
+    mtSec: "Sec",
+    mtSoon: "We will be back soon…",
+    mtAlmost: "Almost done… this page opens by itself",
+    mtBot: "Deposits and balance still work in the bot.",
+    err_maintenance: "The game is closed for maintenance.",
     err_closed: "Picking is closed. Wait for the next round.",
     err_taken: "That cartela is taken.",
     err_funds: "Not enough balance. Deposit in the bot.",
@@ -278,7 +294,7 @@ function useRooms(active) {
     const load = () =>
       fetch(API_URL + "/api/rooms")
         .then((r) => r.json())
-        .then((d) => !stop && setRooms(d))
+        .then((d) => !stop && Array.isArray(d) && d.length === 2 && setRooms(d))
         .catch(() => {});
     load();
     const id = setInterval(load, 3000);
@@ -1138,6 +1154,94 @@ function Player() {
   );
 }
 
+// ---------- maintenance screen (the owner switches it on from /finance) ----------
+function useStatus() {
+  const [st, setSt] = useState(null);
+  const wasOn = useRef(false);
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      fetch(API_URL + "/api/status", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (stop) return;
+          if (wasOn.current && !d.on) {
+            location.reload();
+            return;
+          } // the game is open again
+          wasOn.current = !!d.on;
+          setSt({ ...d, off: (d.now || Date.now()) - Date.now() }); // corrects a wrong clock on the phone
+        })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 10000);
+    return () => {
+      stop = true;
+      clearInterval(id);
+    };
+  }, []);
+  return st;
+}
+
+function Maintenance({ st }) {
+  const { t } = useL();
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const left = st.until ? Math.max(0, st.until - (now + st.off)) : 0;
+  const parts = [
+    [Math.floor(left / 864e5), "mtDays"],
+    [Math.floor(left / 36e5) % 24, "mtHours"],
+    [Math.floor(left / 6e4) % 60, "mtMin"],
+    [Math.floor(left / 1e3) % 60, "mtSec"],
+  ];
+  return (
+    <main className='mx-auto grid min-h-dvh max-w-md place-items-center p-4'>
+      <section className='glass w-full overflow-hidden rounded-[2rem] p-5 text-center'>
+        {st.image && (
+          <img
+            src={`${API_URL}/maintenance/image?v=${st.v}`}
+            alt=''
+            className='mb-5 max-h-72 w-full rounded-3xl object-cover shadow-lg'
+          />
+        )}
+        <p className='text-4xl' aria-hidden>
+          🛠️
+        </p>
+        <h1 className='mt-2 bg-gradient-to-r from-yellow-300 to-orange-500 bg-clip-text text-3xl font-extrabold leading-tight text-transparent'>
+          {st.title}
+        </h1>
+        {st.message && (
+          <p className='mt-3 whitespace-pre-wrap text-white/85'>{st.message}</p>
+        )}
+        {st.until > 0 && left > 0 ? (
+          <div
+            className='mt-6 grid grid-cols-4 gap-2'
+            role='timer'
+            aria-live='off'
+          >
+            {parts.map(([n, k]) => (
+              <div key={k} className='glass rounded-2xl py-3'>
+                <p className='text-3xl font-extrabold tabular-nums'>
+                  {String(n).padStart(2, "0")}
+                </p>
+                <p className='text-[11px] text-purple-200'>{t(k)}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className='mt-6 animate-pulse font-semibold text-saffron'>
+            {st.until > 0 ? t("mtAlmost") : t("mtSoon")}
+          </p>
+        )}
+        <p className='mt-6 text-sm text-white/60'>{t("mtBot")}</p>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const [lang, setLang] = useState(() => {
     try {
@@ -1165,7 +1269,14 @@ export default function App() {
     }),
     [lang],
   );
+  const st = useStatus();
   if (location.hash === "#admin") return <Admin />;
+  if (st?.on)
+    return (
+      <LangCtx.Provider value={ctx}>
+        <Maintenance st={st} />
+      </LangCtx.Provider>
+    );
   return (
     <LangCtx.Provider value={ctx}>
       <Player />

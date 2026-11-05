@@ -31,10 +31,11 @@ const ICONS = {
   people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.5 3.2-5.5 6.5-5.5s5.9 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.4.2 4 1.8 4.5 4.5"/>',
   cash: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/><circle cx="16.5" cy="15" r="1.2"/>',
   expenses: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+  maintenance: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
   announce: '<path d="M3 11v2a1 1 0 0 0 1 1h2l6 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M16 8a5 5 0 0 1 0 8"/><path d="M19 5a9 9 0 0 1 0 14"/>',
 }
 const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`
-const PAGES = [['overview', 'Overview'], ['revenue', 'Revenue'], ['people', 'People'], ['cash', 'Cash'], ['expenses', 'Expenses'], ['announce', 'Announce', 'Announcements']]
+const PAGES = [['overview', 'Overview'], ['revenue', 'Revenue'], ['people', 'People'], ['cash', 'Cash'], ['expenses', 'Expenses'], ['announce', 'Announce', 'Announcements'], ['maintenance', 'Maint.', 'Maintenance']]
 const KINDS = {
   entry: ['Bet', 'v'], win: ['Prize won', 'g'], deposit: ['Deposit', 'b'], withdraw: ['Withdraw request', 'a'],
   refund: ['Refund', 'a'], signup_bonus: ['Signup bonus', 'v'], referral: ['Invite reward', 'v'], cashback: ['Cashback', 'v'],
@@ -216,7 +217,7 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 function renderTop() {
   const pg = PAGES.find((p) => p[0] === S.page)
   const title = pg[2] || pg[1]
-  const showRange = S.page !== 'cash' && S.page !== 'announce'
+  const showRange = S.page !== 'cash' && S.page !== 'announce' && S.page !== 'maintenance'
   $('#top').innerHTML = `<h2>${title}</h2><div class="grow"></div>` + (showRange ? `
     <div class="chips" id="chips">${[[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, 'Year']].map(([n, l]) => `<button data-n="${n}" class="${S.preset === n ? 'on' : ''}">${l}</button>`).join('')}<button data-n="0" class="${S.preset === 0 ? 'on' : ''}">Custom</button></div>
     ${S.preset === 0 ? `<div class="dates"><input class="in" type="date" id="df" value="${S.from}" max="${today()}"> to <input class="in" type="date" id="dt" value="${S.to}" max="${today()}"></div>` : ''}` : '')
@@ -245,6 +246,7 @@ async function refresh(manual) {
     S.cur = cur; S.prev = prev; S.stamp = Date.now()
     const pend = cur.now.pendingDeposits.count + cur.now.pendingWithdrawals.count
     const bd = $('#bd'); if (bd) { bd.hidden = !pend; bd.textContent = pend }
+    const mb = $('#nav [data-p="maintenance"]'); if (mb) mb.classList.toggle('live', !!cur.now.maintenance)
     renderTop(); renderPage()
     if (manual) toast('Updated')
   } catch (e) { if (e.message !== 'login') view.innerHTML = `<div class="card glass empty">${esc(e.message)}</div>` }
@@ -252,7 +254,8 @@ async function refresh(manual) {
 
 function renderPage() {
   if (!S.cur) return
-  const fn = { overview: viewOverview, revenue: viewRevenue, people: viewPeople, cash: viewCash, expenses: viewExpenses, announce: viewAnnounce }[S.page]
+  if (S.page === 'maintenance' && $('#mstat')) return // keep what is typed in the form
+  const fn = { overview: viewOverview, revenue: viewRevenue, people: viewPeople, cash: viewCash, expenses: viewExpenses, announce: viewAnnounce, maintenance: viewMaintenance }[S.page]
   fn()
   const st = $('#stamp'); if (st) st.textContent = 'Updated ' + new Date(S.stamp).toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
 }
@@ -268,6 +271,7 @@ function viewOverview() {
   const cash = d.now.depositsAllTime - d.now.withdrawnAllTime - d.now.expensesAllTime
   const owed = d.now.mainWallets + d.now.pendingWithdrawals.amount
   $('#view').innerHTML = `
+  ${d.now.maintenance ? '<div class="alert down">🔧 Maintenance is ON: players see the “we’ll be back” screen. Open the Maintenance page to reopen the game.</div>' : ''}
   ${pend ? `<div class="alert">⏳ ${d.now.pendingDeposits.count} deposit(s) and ${d.now.pendingWithdrawals.count} withdrawal(s) are waiting for you in the Admin panel.</div>` : ''}
   <div class="grid kpis">
     ${kpi('Net profit', `<span class="${sign(t.net)}">${fmt0(t.net)}</span><small>ETB</small>`, `${p ? delta(t.net, p.net) : ''}<span>after ${fmt0(t.expenses)} expenses</span>`, '💎', 'hero')}
@@ -620,6 +624,112 @@ async function loadAnnHistory() {
   } catch (e) { if (e.message !== 'login') box.innerHTML = `<p class="empty">${esc(e.message)}</p>` }
 }
 
+// ---------- maintenance ----------
+const M = { loaded: false, on: false, title: '', message: '', until: 0, hasImage: false, v: 0, file: null, removeImage: false, imgUrl: '' }
+let mtTimer = 0
+const MSGS = {
+  improving: ['እየተሻሻልን ነው', 'ጨዋታውን እያሻሻልን ነው። በቅርቡ እንመለሳለን!\nWe are improving the game and will be right back.'],
+  update: ['አዲስ ማሻሻያ እየተጫነ ነው', 'አዲስ ባህሪያትን እየጨመርን ነው። ይቅርታ ለጊዜው!\nInstalling a new update. Thank you for your patience.'],
+  short: ['ለአጭር ጊዜ ዝግ ነው', 'ጨዋታው ለአጭር ጊዜ ዝግ ነው። ገንዘብዎ ደህንነቱ የተጠበቀ ነው።\nBack in a few minutes. Your money is safe.'],
+}
+const toLocalInput = (ms) => { if (!ms) return ''; const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16) }
+
+function mtPreviewHtml() {
+  const left = M.until ? Math.max(0, M.until - Date.now()) : 0
+  const parts = [[Math.floor(left / 864e5), 'Days'], [Math.floor(left / 36e5) % 24, 'Hours'], [Math.floor(left / 6e4) % 60, 'Min'], [Math.floor(left / 1e3) % 60, 'Sec']]
+  const src = M.file ? M.imgUrl : (M.hasImage && !M.removeImage ? `/finance/api/maintenance/image?v=${M.v}` : '')
+  return `<div class="mt-card">${src ? `<img src="${src}" alt="">` : ''}<div class="mt-ico">🛠️</div><h4>${esc(M.title || "We'll be right back")}</h4>
+    ${M.message ? `<p>${esc(M.message)}</p>` : ''}
+    ${left > 0 ? `<div class="mt-clock">${parts.map(([n, l]) => `<div><b>${String(n).padStart(2, '0')}</b><small>${l}</small></div>`).join('')}</div>` : `<p class="mt-soon">${M.until ? 'Almost done…' : 'We will be back soon…'}</p>`}</div>`
+}
+
+async function viewMaintenance() {
+  clearInterval(mtTimer)
+  if (!M.loaded) {
+    $('#view').innerHTML = '<div class="skel" style="height:300px"></div>'
+    try {
+      Object.assign(M, await api('/maintenance'), { loaded: true })
+    } catch (e) { if (e.message !== 'login') $('#view').innerHTML = `<div class="card glass empty">${esc(e.message)}</div>`; return }
+  }
+  $('#view').innerHTML = `
+  <section class="card glass mt-hero ${M.on ? 'down' : 'live'}" id="mstat"></section>
+  <div class="grid two eq" style="margin-top:16px">
+    <section class="card glass"><h3>Maintenance screen</h3>
+      <label class="f" for="mti">Title</label><input class="in" id="mti" maxlength="80" placeholder="We'll be right back">
+      <label class="f" for="mms">Message</label><textarea class="in" id="mms" rows="5" maxlength="600" placeholder="Tell players what is happening…"></textarea>
+      <div class="chipsrow" id="mq">${Object.entries({ improving: 'Improving', update: 'New update', short: 'Short break' }).map(([k, l]) => `<button type="button" class="btn ghost small" data-q="${k}">${l}</button>`).join('')}</div>
+      <label class="f" for="mun">Back online at <span class="mut">(optional, shows a countdown)</span></label>
+      <input class="in" id="mun" type="datetime-local">
+      <div class="chipsrow" id="mu">${[['30', '+30 min'], ['60', '+1 hour'], ['180', '+3 hours'], ['tom', 'Tomorrow 8:00'], ['0', 'No countdown']].map(([k, l]) => `<button type="button" class="btn ghost small" data-u="${k}">${l}</button>`).join('')}</div>
+      <label class="f">Picture (optional)</label>
+      <div class="drop" id="mdr" tabindex="0" role="button" aria-label="Choose a picture"></div>
+      <input type="file" id="mfi" accept="image/jpeg,image/png" hidden>
+      <div class="actions"><button class="btn ghost" id="msave">Save changes</button></div>
+      <p class="note">To close the game for players, use the big button at the top. While maintenance is on, the game and the pick/play connection are closed. The Telegram bot (deposit, balance, withdraw) keeps working.</p>
+    </section>
+    <section class="card glass"><h3>Preview <small>what players see</small></h3><div class="mt-phone" id="mpv"></div></section>
+  </div>`
+  const $v = (id, v) => { $(id).value = v }
+  $v('#mti', M.title); $v('#mms', M.message); $v('#mun', toLocalInput(M.until))
+  const stat = () => {
+    $('#mstat').className = `card glass mt-hero ${M.on ? 'down' : 'live'}`
+    $('#mstat').innerHTML = `<div class="mt-pulse"></div><div class="grow"><h2>${M.on ? 'Game is CLOSED for maintenance' : 'Game is LIVE'}</h2>
+      <p>${M.on ? `Players see the maintenance screen${M.until ? ' with a countdown to ' + new Date(M.until).toLocaleString('en-US', { timeZone: TZ, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}.` : 'Players can pick numbers and play normally.'}</p></div>
+      <button class="btn ${M.on ? '' : 'danger'}" id="mtog">${M.on ? '▶ Reopen the game' : '⏸ Close the game now'}</button>`
+    $('#mtog').onclick = () => submit(!M.on)
+  }
+  const prev = () => { $('#mpv').innerHTML = mtPreviewHtml() }
+  const drop = () => {
+    const d = $('#mdr'), src = M.file ? M.imgUrl : (M.hasImage && !M.removeImage ? `/finance/api/maintenance/image?v=${M.v}` : '')
+    d.innerHTML = src ? `<img src="${src}" alt=""><div><b>${M.file ? esc(M.file.name) : 'Saved picture'}</b><small>click to change</small></div><button type="button" class="xbtn" id="mdel">Remove</button>` : '<div><b>Click or drop a picture here</b><small>JPG or PNG, up to 2 MB</small></div>'
+    const del = $('#mdel'); if (del) del.onclick = (e) => { e.stopPropagation(); M.file = null; M.removeImage = true; $('#mfi').value = ''; drop(); prev() }
+  }
+  const pick = (f) => {
+    if (!f) return
+    if (!['image/jpeg', 'image/png'].includes(f.type)) return toast('Use a JPG or PNG picture')
+    if (f.size > 2 * 1048576) return toast('The picture is larger than 2 MB')
+    if (M.imgUrl) URL.revokeObjectURL(M.imgUrl)
+    M.file = f; M.removeImage = false; M.imgUrl = URL.createObjectURL(f); drop(); prev()
+  }
+  const submit = async (turnOn) => {
+    if (turnOn && !confirm('Close the game for ALL players now?\n\nRounds that have not started are cancelled and their stakes refunded. Rounds already running finish normally.')) return
+    if (turnOn && M.until && M.until < Date.now()) return toast('The return time is in the past. Pick a later time or clear it.')
+    const fd = new FormData()
+    fd.append('on', turnOn ? '1' : '0'); fd.append('title', $('#mti').value); fd.append('message', $('#mms').value)
+    fd.append('until', M.until ? String(M.until) : ''); fd.append('removeImage', M.removeImage ? '1' : '0')
+    if (M.file) fd.append('image', M.file)
+    $$('#mtog,#msave').forEach((b) => { b.disabled = true })
+    const was = M.on
+    try {
+      const r = await api('/maintenance', { method: 'POST', form: fd })
+      Object.assign(M, r, { file: null, removeImage: false })
+      toast(turnOn ? (was ? 'Saved' : 'Game closed') : (was ? 'Game reopened' : 'Saved'))
+      viewMaintenance(); refresh()
+    } catch (e) { if (e.message !== 'login') toast(e.message); $$('#mtog,#msave').forEach((b) => { b.disabled = false }) }
+  }
+  $('#mti').oninput = (e) => { M.title = e.target.value; prev() }
+  $('#mms').oninput = (e) => { M.message = e.target.value; prev() }
+  $('#mun').onchange = (e) => { M.until = e.target.value ? new Date(e.target.value).getTime() : 0; prev() }
+  $('#mq').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; const [t, m] = MSGS[b.dataset.q]; M.title = t; M.message = m; $('#mti').value = t; $('#mms').value = m; prev() }
+  $('#mu').onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return
+    const k = b.dataset.u
+    if (k === '0') M.until = 0
+    else if (k === 'tom') { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); M.until = d.getTime() }
+    else M.until = Date.now() + Number(k) * 60000
+    $('#mun').value = toLocalInput(M.until); prev()
+  }
+  $('#mdr').onclick = () => $('#mfi').click()
+  $('#mdr').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#mfi').click() } }
+  $('#mdr').ondragover = (e) => { e.preventDefault(); $('#mdr').classList.add('over') }
+  $('#mdr').ondragleave = () => $('#mdr').classList.remove('over')
+  $('#mdr').ondrop = (e) => { e.preventDefault(); $('#mdr').classList.remove('over'); pick(e.dataTransfer.files[0]) }
+  $('#mfi').onchange = (e) => pick(e.target.files[0])
+  $('#msave').onclick = () => submit(M.on)
+  stat(); drop(); prev()
+  mtTimer = setInterval(() => { if (S.page !== 'maintenance' || !$('#mpv')) { clearInterval(mtTimer); return } prev() }, 1000)
+}
+
 // ---------- csv ----------
 function csv(name, rows) {
   const body = rows.map((r) => r.map((v) => { const s = String(v ?? ''); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + s.replace(/"/g, '""').replace(/^([=+\-@])/, "'$1") + '"' : s }).join(',')).join('\n')
@@ -640,6 +750,6 @@ async function boot() {
   go('overview')
   await refresh()
   clearInterval(S.timer)
-  S.timer = setInterval(() => { if (!document.hidden && S.page !== 'expenses' && S.page !== 'announce') refresh() }, 60000)
+  S.timer = setInterval(() => { if (!document.hidden && S.page !== 'expenses' && S.page !== 'announce' && S.page !== 'maintenance') refresh() }, 60000)
 }
 boot()

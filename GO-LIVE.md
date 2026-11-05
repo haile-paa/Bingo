@@ -48,3 +48,10 @@ Every paid cartela is also saved in the database. If the server stops mid-round,
 - Test first: your owner phone number (`OWNER_PHONE`) must be registered in the bot to receive the test.
 - It is sent about 18 messages a second, with a progress bar. Press Stop to cancel. Only one announcement can send at a time, and at most 8 per hour.
 - People who blocked the bot show as "blocked". Send announcements sparingly: too many may make players block the bot.
+
+## 8. Maintenance mode (`/finance` -> Maint.)
+- Write a title and message, optionally add a picture and a "back online at" time (shows a live countdown), then press **Close the game now**.
+- Players see the maintenance screen; the game and the pick/play connection are closed. Rounds that have not started are cancelled and every stake is refunded; rounds already running finish normally and winners are paid.
+- The Telegram bot keeps working (deposit, balance, withdraw).
+- Press **Reopen the game** to switch it off; players' phones reload by themselves within about 10 seconds.
+- If the server restarts while maintenance is on, it stays on (the setting is saved in the database).

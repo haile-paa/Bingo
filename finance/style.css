@@ -205,3 +205,25 @@ select.in { appearance: none; background-image: linear-gradient(45deg, transpare
 .bar2 { height: 8px; border-radius: 999px; background: var(--card2); overflow: hidden; margin-bottom: 4px; } .bar2 div { height: 100%; background: linear-gradient(90deg, var(--violet), var(--green)); transition: width .4s; }
 
 @media (max-width: 520px) { .nav button { font-size: 10px; padding: 8px 2px; } }
+
+/* ---------- maintenance ---------- */
+.alert.down { background: rgba(255,107,139,.12); border-color: rgba(255,107,139,.4); color: #ffc2d0; }
+.nav button.live::after { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--rose); box-shadow: 0 0 0 4px rgba(255,107,139,.2); margin-left: auto; }
+.mt-hero { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.mt-hero.down { background: linear-gradient(135deg, rgba(255,107,139,.2), rgba(255,197,61,.12)); border-color: rgba(255,107,139,.4); }
+.mt-hero.live { background: linear-gradient(135deg, rgba(46,230,166,.18), rgba(77,171,255,.12)); }
+.mt-hero h2 { font-size: 20px; } .mt-hero p { color: var(--muted); font-size: 14px; margin-top: 4px; } .mt-hero .grow { flex: 1; min-width: 200px; }
+.mt-pulse { width: 16px; height: 16px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(46,230,166,.6); animation: pulse 1.8s infinite; flex: none; }
+.mt-hero.down .mt-pulse { background: var(--rose); box-shadow: 0 0 0 0 rgba(255,107,139,.6); }
+@keyframes pulse { 70% { box-shadow: 0 0 0 14px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+.btn.danger { background: linear-gradient(135deg, #ff8aa3, #ff6b8b); color: #3a0716; }
+.chipsrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.mt-phone { margin-top: 12px; padding: 18px; border-radius: 22px; background: linear-gradient(135deg, #5b1a9e, #16123a 50%, #2b2380); border: 1px solid var(--line); }
+.mt-card { padding: 16px; border-radius: 24px; text-align: center; background: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.05) 45%, rgba(255,255,255,.1)); border: 1px solid rgba(255,255,255,.26); }
+.mt-card img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 18px; margin-bottom: 14px; }
+.mt-ico { font-size: 30px; } .mt-card h4 { font-size: 24px; margin-top: 4px; background: linear-gradient(90deg, #fde047, #f97316); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.mt-card p { margin-top: 10px; white-space: pre-wrap; color: rgba(255,255,255,.85); font-size: 14px; }
+.mt-card .mt-soon { color: var(--amber); font-weight: 700; }
+.mt-clock { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+.mt-clock div { padding: 10px 0; border-radius: 14px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); }
+.mt-clock b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; } .mt-clock small { color: #cbb7ff; font-size: 11px; }

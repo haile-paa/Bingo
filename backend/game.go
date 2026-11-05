@@ -276,6 +276,10 @@ func (g *Game) toggle(cl *Client, n int) {
 	if n < 1 || n > totalSpots {
 		return
 	}
+	if maintOn() {
+		cl.fail("maintenance")
+		return
+	}
 	g.mu.Lock()
 	if g.phase != "pick" {
 		g.mu.Unlock()
@@ -509,6 +513,10 @@ func wsHandler(c *gin.Context) {
 	}
 	if _, err := ensureUser(c.Request.Context(), uid, name, 0); err != nil {
 		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if maintOn() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "maintenance"})
 		return
 	}
 	stake, _ := strconv.Atoi(c.DefaultQuery("s", "10"))

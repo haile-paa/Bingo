@@ -160,6 +160,7 @@ func main() {
 	db = client.Database("bingo")
 	ensureIndexes(ctx)
 
+	startMaintenance()
 	startBG()
 	startGames()
 	go startSpotJanitor()
@@ -172,9 +173,11 @@ func main() {
 	r.GET("/health", func(c *gin.Context) { c.String(200, "ok") }) // ping this to keep the server awake
 	r.GET("/ws", wsHandler)
 	r.GET("/api/rooms", roomsHandler)
+	r.GET("/api/status", statusHandler)       // public: is the game open?
+	r.GET("/maintenance/image", maintImage) // public: the picture of the maintenance screen
 	r.POST("/bot/:secret", botWebhook)
 
-	api := r.Group("/api", userAuth())
+	api := r.Group("/api", maintenanceGate(), userAuth())
 	api.GET("/me", meHandler)
 	api.GET("/txs", txsHandler)
 	api.POST("/withdraw", withdrawHandler)
