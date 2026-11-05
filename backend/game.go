@@ -84,7 +84,9 @@ type Game struct {
 	called   []int
 	marked   [76]bool
 	result   *Result
-	botWin   bool // bots can win this round (setting at the start of the round)
+	botWin   bool // bots can win this round (follows the /finance setting during the pick time)
+	botSeq   int  // numbering of the bots of this round
+	botFilling bool // a bot filler is running
 	clients  map[*Client]struct{}
 }
 
@@ -391,15 +393,26 @@ func (g *Game) pick() {
 	g.marked = [76]bool{}
 	stake := int(g.fee / 100)
 	bs := botSettings(stake)
-	g.botWin = bs.On && bs.CanWin
+	g.botWin, g.botSeq, g.botFilling = bs.On && bs.CanWin, 0, false
 	gid := g.gid
 	g.pushState()
 	g.mu.Unlock()
-	go g.fillBots(gid, stake)
 	for {
 		time.Sleep(time.Second)
 		g.mu.Lock()
 		due := time.Now().After(g.deadline)
+		cur := botSettings(stake) // checked every second, so switching bots on in /finance works at once
+		g.botWin = cur.On && cur.CanWin
+		if cur.On && !g.botFilling {
+			target := cur.Count
+			if target > totalSpots-1 {
+				target = totalSpots - 1
+			}
+			if need := target - len(g.botList()); need > 0 {
+				g.botFilling = true
+				go g.fillBots(gid, stake, need)
+			}
+		}
 		ready := due && g.nSpots() >= minSpots && (len(g.botList()) == 0 || g.nReal() >= 1)
 		if due && !ready { // not enough cartelas yet: keep the picks and wait another round of time
 			g.deadline = time.Now().Add(pickTime)

@@ -121,23 +121,33 @@ func (g *Game) nReal() int {
 	return n
 }
 
-// fillBots runs once per round: the bots take their numbers at random moments during the first 25 seconds.
-func (g *Game) fillBots(gid string, stake int) {
-	cfg := botSettings(stake)
-	if !cfg.On || cfg.Count <= 0 {
-		return
+// fillBots adds `need` bots at random moments inside the pick time (never later than 5 s before the round starts).
+// It is started by pick() whenever bots are ON and fewer bots than the setting are holding numbers, so it also works
+// when the owner switches bots on in the middle of a round or while the room waits for more players.
+func (g *Game) fillBots(gid string, stake, need int) {
+	defer func() {
+		g.mu.Lock()
+		if g.gid == gid {
+			g.botFilling = false
+		}
+		g.mu.Unlock()
+	}()
+	g.mu.Lock()
+	win := time.Until(g.deadline) - 5*time.Second
+	g.mu.Unlock()
+	if win > botFillWindow {
+		win = botFillWindow
 	}
-	count := cfg.Count
-	if count > totalSpots-1 {
-		count = totalSpots - 1
+	if win < 2*time.Second {
+		win = 2 * time.Second
 	}
-	delays := make([]time.Duration, count)
+	delays := make([]time.Duration, need)
 	for i := range delays {
-		delays[i] = time.Duration(randInt(int(botFillWindow/time.Millisecond))) * time.Millisecond
+		delays[i] = time.Duration(randInt(int(win/time.Millisecond))) * time.Millisecond
 	}
 	sort.Slice(delays, func(a, b int) bool { return delays[a] < delays[b] })
 	start := time.Now()
-	for i, d := range delays {
+	for _, d := range delays {
 		if w := d - time.Since(start); w > 0 {
 			time.Sleep(w)
 		}
@@ -160,7 +170,8 @@ func (g *Game) fillBots(gid string, stake int) {
 			return
 		}
 		n := free[randInt(len(free))]
-		g.spots[n] = Spot{UID: -int64(i + 1), Bot: true}
+		g.botSeq++
+		g.spots[n] = Spot{UID: -int64(g.botSeq), Bot: true}
 		g.dirty = append(g.dirty, gin.H{"n": n, "on": true, "bot": true})
 		g.mu.Unlock()
 	}
@@ -218,5 +229,5 @@ func finBotsSet(c *gin.Context) {
 // botPhone is a random masked number in the same look as real winners (09*****1404) with the robot icon at the end.
 // It is not a real person's number: only the last 4 digits are random.
 func botPhone() string {
-	return "09*****" + strconv.Itoa(1000+randInt(9000)) 
+	return "09*****" + strconv.Itoa(1000+randInt(9000))
 }
