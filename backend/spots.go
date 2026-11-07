@@ -60,6 +60,9 @@ func bg(f func()) {
 func (g *Game) pay(cl *Client, n int, gid, tok string) (string, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if isBlocked(cl.uid) {
+		return "", "blocked"
+	}
 	if !cl.registered { // checked once per connection, not once per tap
 		u, err := loadUser(ctx, cl.uid)
 		if err != nil {

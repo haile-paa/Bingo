@@ -166,6 +166,19 @@ func handleUpdate(up Update) {
 	if from != 0 && !rl.allow("bot:"+strconv.FormatInt(from, 10), 25, time.Minute) {
 		return // flooding: ignore
 	}
+	if from != 0 && isBlocked(from) { // blocked players get nothing from the bot (no deposit, no withdrawal, no menu)
+		if up.Callback != nil {
+			tg("answerCallbackQuery", gin.H{"callback_query_id": up.Callback.ID})
+		}
+		if rl.allow("blockmsg:"+strconv.FormatInt(from, 10), 1, time.Minute) {
+			msg := msgBlocked
+			if cfg.SupportUser != "" {
+				msg += "\n@" + strings.TrimPrefix(cfg.SupportUser, "@")
+			}
+			notify(from, msg)
+		}
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if up.Callback != nil {

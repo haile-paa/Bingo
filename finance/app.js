@@ -45,7 +45,7 @@ const kindChip = (k) => `<span class="chip ${(KINDS[k] || ['', ''])[1]}">${esc((
 
 // ---------- state ----------
 const S = { page: 'overview', preset: 30, from: '', to: '', cur: null, prev: null, owner: '', stamp: 0,
-  people: { q: '', sort: 'joined', order: 'desc', page: 1, data: null }, ledgerKind: '', timer: null }
+  people: { q: '', f: '', sort: 'joined', order: 'desc', page: 1, data: null }, ledgerKind: '', timer: null }
 
 function setPreset(n) { S.preset = n; S.to = today(); S.from = addDays(S.to, -(n - 1)) }
 
@@ -366,17 +366,19 @@ function viewPeople() {
   <section class="card glass"><div class="toolbar">
     <input class="in" id="q" type="search" placeholder="Search name, phone or Telegram ID" value="${esc(P.q)}">
     <select class="in" id="so">${SORTS.map(([k, l]) => `<option value="${k}" ${P.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <select class="in" id="fl"><option value="">All players</option><option value="blocked" ${P.f === 'blocked' ? 'selected' : ''}>Blocked only</option></select>
     <button class="btn ghost small" id="od">${P.order === 'desc' ? '↓ High to low' : '↑ Low to high'}</button>
     <button class="btn ghost small" id="ex">⬇ Export all</button></div>
     <div id="pt"><div class="skel" style="height:240px;margin-top:14px"></div></div></section>`
   $('#q').oninput = debounce((e) => { P.q = e.target.value; P.page = 1; loadPeople() }, 300)
   $('#so').onchange = (e) => { P.sort = e.target.value; P.page = 1; loadPeople() }
+  $('#fl').onchange = (e) => { P.f = e.target.value; P.page = 1; loadPeople() }
   $('#od').onclick = () => { P.order = P.order === 'desc' ? 'asc' : 'desc'; viewPeople() }
   $('#ex').onclick = exportPeople
   loadPeople()
 }
 
-const peopleQS = (P, page, size) => `/people?q=${encodeURIComponent(P.q)}&sort=${P.sort}&order=${P.order}&page=${page}&size=${size}`
+const peopleQS = (P, page, size) => `/people?q=${encodeURIComponent(P.q)}&f=${P.f}&sort=${P.sort}&order=${P.order}&page=${page}&size=${size}`
 
 async function loadPeople() {
   const P = S.people, box = $('#pt'); if (!box) return
@@ -385,7 +387,7 @@ async function loadPeople() {
     const pages = Math.max(1, Math.ceil(j.total / j.size))
     box.innerHTML = `
     <div class="tablewrap"><table><thead><tr><th>Player</th><th>Phone</th><th>Prize wallet</th><th>Play wallet</th><th>Deposited</th><th>Withdrawn</th><th>Bets</th><th>Prizes</th><th>Your profit</th></tr></thead>
-    <tbody>${j.rows.map((r) => `<tr class="click" data-id="${r.id}"><td><div class="who">${avatar(r.name, r.id)}<div>${esc(r.name || 'Player')}<small>ID ${r.id} · ${joinDate(r.joined)}</small></div></div></td>
+    <tbody>${j.rows.map((r) => `<tr class="click" data-id="${r.id}"><td><div class="who">${avatar(r.name, r.id)}<div>${esc(r.name || 'Player')}${r.blocked ? ' <span class="chip r">blocked</span>' : ''}<small>ID ${r.id} · ${joinDate(r.joined)}</small></div></div></td>
       <td>${r.phone ? esc(r.phone) : '<span class="chip">not registered</span>'}</td><td class="num">${fmt(r.balance)}</td><td class="num">${fmt(r.bonus)}</td><td class="num">${fmt(r.deposits)}</td>
       <td class="num">${fmt(r.withdrawn)}</td><td class="num">${fmt(r.stakes)}</td><td class="num">${fmt(r.prizes)}</td><td class="num ${sign(r.houseProfit)}">${fmt(r.houseProfit)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty">No players found.</td></tr>'}</tbody>
     <tfoot><tr><td>All ${int(j.total)} players</td><td></td><td class="num">${fmt(j.sums.balance)}</td><td class="num">${fmt(j.sums.bonus)}</td><td class="num">${fmt(j.sums.deposits)}</td><td class="num">${fmt(j.sums.withdrawn)}</td><td class="num">${fmt(j.sums.stakes)}</td><td class="num">${fmt(j.sums.prizes)}</td><td class="num ${sign(j.sums.houseProfit)}">${fmt(j.sums.houseProfit)}</td></tr></tfoot></table></div>
@@ -398,11 +400,11 @@ async function loadPeople() {
 
 async function exportPeople() {
   toast('Preparing…')
-  const rows = [['ID', 'Name', 'Phone', 'Prize wallet', 'Play wallet', 'Deposited', 'Withdrawn', 'Bets', 'Prizes', 'Your profit', 'Cartelas', 'Invited', 'Joined']]
+  const rows = [['ID', 'Name', 'Phone', 'Prize wallet', 'Play wallet', 'Deposited', 'Withdrawn', 'Bets', 'Prizes', 'Your profit', 'Cartelas', 'Invited', 'Joined', 'Blocked']]
   try {
     for (let page = 1; page <= 100; page++) {
       const j = await api(peopleQS(S.people, page, 100))
-      for (const r of j.rows) rows.push([r.id, r.name, r.phone, r.balance / 100, r.bonus / 100, r.deposits / 100, r.withdrawn / 100, r.stakes / 100, r.prizes / 100, r.houseProfit / 100, r.entries, r.refs, new Date(r.joined).toISOString().slice(0, 10)])
+      for (const r of j.rows) rows.push([r.id, r.name, r.phone, r.balance / 100, r.bonus / 100, r.deposits / 100, r.withdrawn / 100, r.stakes / 100, r.prizes / 100, r.houseProfit / 100, r.entries, r.refs, new Date(r.joined).toISOString().slice(0, 10), r.blocked ? 'yes' : ''])
       if (page * j.size >= j.total) break
     }
     csv('players.csv', rows)
@@ -427,10 +429,22 @@ async function openPerson(id) {
       <div><small>Your profit</small><b class="num ${sign(u.houseProfit)}">${fmt(u.houseProfit)}</b></div><div><small>Joined</small><b>${joinDate(u.joined)}</b></div>
       <div><small>Cartelas · wins</small><b class="num">${int(u.entries)} · ${int(u.gamesWon)}</b></div><div><small>Invited · paying</small><b class="num">${int(u.refs)} · ${int(u.refQualified)}</b></div>
     </div>
+    <div class="actions" style="margin:14px 0">${u.blocked ? `<p class="note" style="flex:2;margin:0">🚫 Blocked${u.blockReason ? ': ' + esc(u.blockReason) : ''}</p>` : ''}<button class="btn ${u.blocked ? 'ghost' : 'danger'} small" id="blk">${u.blocked ? 'Unblock player' : '🚫 Block player'}</button></div>
     <h4 class="sec">Deposits</h4>${payList(j.deposits, 'deposit')}
     <h4 class="sec">Withdrawals</h4>${payList(j.withdrawals, 'withdraw')}
     <h4 class="sec">Latest activity</h4><div class="list">${(j.txs || []).map((r) => `<div class="row"><div>${kindChip(r.kind)}<small>${when(r.at)}</small></div><span class="amt num ${sign(r.amount)}">${r.amount > 0 ? '+' : ''}${fmt(r.amount)}</span></div>`).join('') || '<p class="empty">No activity.</p>'}</div>`
     $('.x', dr).onclick = close
+    $('#blk', dr).onclick = async () => {
+      let reason = ''
+      if (!u.blocked) {
+        reason = prompt(`Block ${u.name || 'this player'} (ID ${u.id}) from the whole game?\n\nThey cannot play, deposit or withdraw. Their money stays in their wallet.\n\nReason (optional, only you can see it):`)
+        if (reason === null) return
+      } else if (!confirm('Unblock this player? They can play again at once.')) return
+      try {
+        await api(`/people/${u.id}/block`, { method: 'POST', body: { blocked: !u.blocked, reason } })
+        toast(u.blocked ? 'Player unblocked' : 'Player blocked'); close(); loadPeople()
+      } catch (e) { if (e.message !== 'login') toast(e.message) }
+    }
   } catch (e) { close(); if (e.message !== 'login') toast(e.message) }
 }
 

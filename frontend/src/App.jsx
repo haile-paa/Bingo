@@ -79,6 +79,9 @@ const DICT = {
     err_taken: "ይህ ካርቴላ ተይዟል።",
     err_funds: "በቂ ሂሳብ የለዎትም። በቦቱ ውስጥ ገንዘብ ያስገቡ።",
     err_register: "መጀመሪያ በቦቱ ውስጥ «ተመዝገብ» ን ተጭነው ይመዝገቡ።",
+    err_blocked: "አካውንትዎ ታግዷል።",
+    blocked_title: "አካውንትዎ ታግዷል",
+    blocked_msg: "ይህን ጨዋታ መጫወት አይችሉም። ለበለጠ መረጃ ድጋፍን ያነጋግሩ።",
     err_limit: "አንድ ሰው እስከ {max} ካርቴላ ብቻ መያዝ ይችላል።",
     err_server: "ችግር ተፈጥሯል። እንደገና ይሞክሩ።",
     cbTitle: "ሳምንታዊ ካሽባክ {pct}%",
@@ -193,6 +196,9 @@ const DICT = {
     err_taken: "That cartela is taken.",
     err_funds: "Not enough balance. Deposit in the bot.",
     err_register: "Register in the bot first (tap Register).",
+    err_blocked: "Your account is blocked.",
+    blocked_title: "Your account is blocked",
+    blocked_msg: "You can no longer play this game. Please contact support for more information.",
     err_limit: "You can hold at most {max} cartelas.",
     err_server: "Something went wrong. Try again.",
     cbTitle: "Weekly cashback {pct}%",
@@ -310,6 +316,7 @@ function useGame(stake) {
   const [g, setG] = useState(null);
   const [conn, setConn] = useState(false);
   const [err, setErr] = useState("");
+  const [blocked, setBlocked] = useState(false);
   const ws = useRef(null);
 
   useEffect(() => {
@@ -333,7 +340,11 @@ function useGame(stake) {
       };
       sock.onmessage = (e) => {
         const m = JSON.parse(e.data);
-        if (m.type === "state") setG(m);
+        if (m.type === "blocked") {
+          closed = true; // stop reconnecting
+          clearTimeout(timer);
+          setBlocked(true);
+        } else if (m.type === "state") setG(m);
         else if (m.type === "mine")
           setG((p) => p && { ...p, mine: m.mine, cards: m.cards });
         else if (m.type === "spot") {
@@ -390,7 +401,7 @@ function useGame(stake) {
   );
   // closing the socket makes it reconnect by itself and the server sends a fresh full state
   const reconnect = useCallback(() => ws.current?.close(), []);
-  return { g, conn, err, toggle, reconnect };
+  return { g, conn, err, blocked, toggle, reconnect };
 }
 
 function Cartela({ n, card, called, bg = "bg-panel", compact = false }) {
@@ -1084,14 +1095,17 @@ function Player() {
   const [me, setMe] = useState(null);
   const now = useNow();
   const rooms = useRooms(tab === "game" && view === "lobby");
-  const { g, conn, err, toggle, reconnect } = useGame(
+  const [banned, setBanned] = useState(false);
+  const { g, conn, err, blocked, toggle, reconnect } = useGame(
     view === "play" ? stake : null,
   );
   const refresh = useCallback(
     () =>
       api("/api/me")
         .then(setMe)
-        .catch(() => {}),
+        .catch((e) => {
+          if (e.message === "blocked") setBanned(true);
+        }),
     [],
   );
 
@@ -1112,6 +1126,15 @@ function Player() {
     reconnect();
     refresh();
   };
+
+  if (blocked || banned)
+    return (
+      <div className='mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-3 px-6 text-center'>
+        <p className='text-5xl'>🚫</p>
+        <h1 className='text-xl font-bold'>{t("blocked_title")}</h1>
+        <p className='text-sm opacity-80'>{t("blocked_msg")}</p>
+      </div>
+    );
 
   return (
     <div className='mx-auto flex min-h-dvh max-w-md flex-col'>

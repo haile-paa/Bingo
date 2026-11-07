@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"log"
 	"math/big"
-	mrand "math/rand"
 	"net/http"
 	"sort"
 	"strconv"
@@ -28,10 +27,14 @@ const (
 var cartelas [totalSpots + 1][5][5]int
 
 func init() {
-	r := mrand.New(mrand.NewSource(20261030))
+	// Cards are built with crypto/rand every time the server starts, so nobody can work them out from the source code.
 	for n := 1; n <= totalSpots; n++ {
 		for c := 0; c < 5; c++ {
-			pool := r.Perm(15)
+			pool := make([]int, 15)
+			for i := range pool {
+				pool[i] = i
+			}
+			shuffle(pool)
 			for row := 0; row < 5; row++ {
 				cartelas[n][row][c] = c*15 + pool[row] + 1
 			}
@@ -286,6 +289,10 @@ func (g *Game) toggle(cl *Client, n int) {
 		cl.fail("maintenance")
 		return
 	}
+	if isBlocked(cl.uid) {
+		cl.fail("blocked")
+		return
+	}
 	g.mu.Lock()
 	if g.phase != "pick" {
 		g.mu.Unlock()
@@ -338,7 +345,7 @@ func (g *Game) toggle(cl *Client, n int) {
 		cl.fail(code)
 		return
 	}
-	if !mine || g.phase != "pick" || g.gid != gid { // the round moved on while we were paying: give the money back
+	if !mine || g.phase != "pick" || g.gid != gid || isBlocked(cl.uid) { // the round moved on while we were paying: give the money back
 		if mine {
 			delete(g.spots, n)
 		}
@@ -546,6 +553,13 @@ func wsHandler(c *gin.Context) {
 	}
 	if maintOn() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "maintenance"})
+		return
+	}
+	if isBlocked(uid) { // tell the app (so it stops reconnecting), then hang up
+		if conn, err := upgrader.Upgrade(c.Writer, c.Request, nil); err == nil {
+			_ = conn.WriteJSON(gin.H{"type": "blocked"})
+			conn.Close()
+		}
 		return
 	}
 	stake, _ := strconv.Atoi(c.DefaultQuery("s", "10"))

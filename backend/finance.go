@@ -122,6 +122,7 @@ func registerFinance(r *gin.Engine) {
 	auth.GET("/summary", finSummary)
 	auth.GET("/people", finPeople)
 	auth.GET("/people/:id", finPerson)
+	auth.POST("/people/:id/block", finBlock)
 	auth.GET("/ledger", finLedger)
 	auth.GET("/pending", finPending)
 	auth.GET("/expenses", finExpenses)
@@ -514,6 +515,8 @@ type pRow struct {
 	Prizes       int64  `json:"prizes"`
 	Entries      int64  `json:"entries"`
 	HouseProfit  int64  `json:"houseProfit"` // stakes - prizes - given-back stakes
+	Blocked      bool   `json:"blocked"`
+	BlockReason  string `json:"blockReason,omitempty"`
 }
 
 var (
@@ -541,7 +544,7 @@ func loadPeople(ctx context.Context, fresh bool) []pRow {
 	out := make([]pRow, len(us))
 	for i, u := range us {
 		out[i] = pRow{ID: u.ID, Name: u.Name, Phone: u.Phone, Balance: u.Balance, Bonus: u.Bonus, Earned: u.Earned,
-			GamesWon: u.GamesWon, RefQualified: u.RefQualified, Joined: u.CreatedAt.UnixMilli()}
+			GamesWon: u.GamesWon, RefQualified: u.RefQualified, Joined: u.CreatedAt.UnixMilli(), Blocked: u.Blocked, BlockReason: u.BlockReason}
 		idx[u.ID] = &out[i]
 	}
 	for _, g := range finAgg(ctx, "txs", []bson.D{
@@ -598,6 +601,9 @@ func finPeople(c *gin.Context) {
 	q := strings.ToLower(strings.TrimSpace(c.Query("q")))
 	filtered := make([]pRow, 0, len(rows))
 	for _, r := range rows {
+		if c.Query("f") == "blocked" && !r.Blocked {
+			continue
+		}
 		if q == "" || strings.Contains(strings.ToLower(r.Name), q) || strings.Contains(r.Phone, q) || strconv.FormatInt(r.ID, 10) == q {
 			filtered = append(filtered, r)
 		}

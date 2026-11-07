@@ -55,6 +55,9 @@ type User struct {
 	GamesWon   int64     `bson:"gamesWon"`
 	Earned     int64     `bson:"earned"`
 	CreatedAt  time.Time `bson:"createdAt"`
+	Blocked     bool      `bson:"blocked,omitempty"`     // blocked from the whole game by the owner (see blocklist.go)
+	BlockedAt   time.Time `bson:"blockedAt,omitempty"`
+	BlockReason string    `bson:"blockReason,omitempty"`
 }
 
 type Deposit struct {

@@ -104,6 +104,10 @@ func userAuth() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests. Please wait a moment."})
 			return
 		}
+		if isBlocked(id) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "blocked"})
+			return
+		}
 		if _, err := ensureUser(c.Request.Context(), id, name, 0); err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "server error"})
 			return
@@ -159,6 +163,7 @@ func main() {
 	}
 	db = client.Database("bingo")
 	ensureIndexes(ctx)
+	loadBlocked(ctx)
 
 	startMaintenance()
 	startBots()
