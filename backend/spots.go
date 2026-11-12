@@ -145,7 +145,7 @@ func recoverStaleSpots() {
 		if err := db.Collection("spots").FindOneAndDelete(ctx, bson.M{"_id": d.ID}).Err(); err != nil {
 			continue // somebody else already took care of it
 		}
-		refundSpot(ctx, Spot{UID: d.UID, Bonus: d.Field == "bonus"}, d.N, d.Fee)
+		refundSpot(ctx, Spot{UID: d.UID, Bonus: d.Field == "bonus", Promo: d.Field == "promo"}, d.N, d.Fee)
 		go notify(d.UID, "ጨዋታው በመቋረጡ የ"+birr(d.Fee)+" ብር ክፍያዎ ተመልሷል።")
 	}
 }

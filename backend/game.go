@@ -46,6 +46,7 @@ func init() {
 type Spot struct {
 	UID     int64
 	Bonus   bool   // paid from the play-only bonus wallet
+	Promo   bool   // paid from the signup promo: a prize won with it goes to the play wallet
 	Bot     bool   // house bot: shown to players with a BOT badge, pays nothing
 	Pending bool   // reserved, payment still in progress (not part of the round yet)
 	Tok     string // unique id of this purchase
@@ -349,12 +350,12 @@ func (g *Game) toggle(cl *Client, n int) {
 		if mine {
 			delete(g.spots, n)
 		}
-		paid := Spot{UID: cl.uid, Bonus: field == "bonus", Tok: tok}
+		paid := Spot{UID: cl.uid, Bonus: field == "bonus", Promo: field == "promo", Tok: tok}
 		bg(func() { refundByTok(gid, n, paid, fee) })
 		cl.fail("closed")
 		return
 	}
-	g.spots[n] = Spot{UID: cl.uid, Bonus: field == "bonus", Tok: tok}
+	g.spots[n] = Spot{UID: cl.uid, Bonus: field == "bonus", Promo: field == "promo", Tok: tok}
 	g.announce(cl, n, true)
 }
 
@@ -505,8 +506,9 @@ func (g *Game) finish(wins []int, prize int64) {
 		sort.Ints(wins)
 		share := prize / int64(len(wins))
 		res.Prize = prize
-		paid := map[int64]int64{}
-		won := map[int64]int64{} // stake money of the winning cartelas, removed from the weekly cashback
+		paid := map[int64]int64{}     // prize paid to the withdrawable wallet
+		paidPlay := map[int64]int64{} // prize won with the signup promo: play wallet only
+		won := map[int64]int64{}      // stake money of the winning cartelas, removed from the weekly cashback
 		for _, n := range wins {
 			uid := spots[n].UID
 			if spots[n].Bot { // a bot won: name carries the robot icon; its share is shown but NOT paid out (stays with the house)
@@ -519,16 +521,28 @@ func (g *Game) finish(wins []int, prize int64) {
 			}
 			res.Winners = append(res.Winners, WinnerOut{Cartela: n, UID: uid, Name: u.Name,
 				Phone: maskPhone(u.Phone), Share: share, Card: cartelas[n]})
-			paid[uid] += share
+			if spots[n].Promo {
+				paidPlay[uid] += share
+			} else {
+				paid[uid] += share
+			}
 			won[uid] += g.fee
 		}
-		for uid, amt := range paid {
-			if err := payWinner(ctx, uid, amt, round); err != nil {
-				log.Println("PAYOUT FAILED", uid, amt, err)
+		for uid := range won {
+			cash, play := paid[uid], paidPlay[uid]
+			if err := payWinner(ctx, uid, cash, play, round); err != nil {
+				log.Println("PAYOUT FAILED", uid, cash, play, err)
 				continue
 			}
 			cbInc(ctx, uid, "wonStake", won[uid])
-			go notify(uid, "🏆 አሸንፈዋል! "+birr(amt)+" ብር ወደ ዋሌትዎ ተጨምሯል።")
+			msg := "🏆 አሸንፈዋል! "
+			if cash > 0 {
+				msg += birr(cash) + " ብር ወደ ዋና ዋሌትዎ ተጨምሯል። "
+			}
+			if play > 0 {
+				msg += birr(play) + " ብር በስጦታ ገንዘብ ስላሸነፉ ወደ የጨዋታ ዋሌትዎ ተጨምሯል (ለመጫወት ብቻ)።"
+			}
+			go notify(uid, msg)
 		}
 	}
 	g.mu.Lock()

@@ -47,6 +47,7 @@ type User struct {
 	Name       string    `bson:"name"`
 	Balance    int64     `bson:"balance"`
 	Bonus      int64     `bson:"bonus"`
+	Promo      int64     `bson:"promo"` // signup bonus: play-only; anything won with it goes to the play wallet (bonus), never to balance
 	ReferredBy int64     `bson:"referredBy"`
 	RefPaid    bool      `bson:"refPaid"`
 	RefQualified int64   `bson:"refQualified"` // invited friends whose first deposit was approved
@@ -120,9 +121,9 @@ func credit(ctx context.Context, uid int64, field string, amt int64) error {
 	return err
 }
 
-// spend takes the entry fee from bonus first, then cash balance. It returns the wallet used ("" if too poor).
+// spend takes the entry fee from the signup promo first, then the play wallet, then cash balance. It returns the wallet used ("" if too poor).
 func spend(ctx context.Context, uid, amt int64) (string, error) {
-	for _, field := range []string{"bonus", "balance"} {
+	for _, field := range []string{"promo", "bonus", "balance"} {
 		res, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid, field: bson.M{"$gte": amt}}, bson.M{"$inc": bson.M{field: -amt}})
 		if err != nil {
 			return "", err
@@ -145,7 +146,7 @@ func ensureUser(ctx context.Context, id int64, name string, ref int64) (bool, er
 		}
 	}
 	res, err := users.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$setOnInsert": bson.M{
-		"name": name, "balance": int64(0), "bonus": int64(0), "gamesWon": int64(0), "earned": int64(0), "referredBy": ref, "refPaid": false, "createdAt": time.Now(),
+		"name": name, "balance": int64(0), "bonus": int64(0), "promo": int64(0), "gamesWon": int64(0), "earned": int64(0), "referredBy": ref, "refPaid": false, "createdAt": time.Now(),
 	}}, options.Update().SetUpsert(true))
 	if err != nil {
 		return false, err
@@ -354,7 +355,7 @@ func meHandler(c *gin.Context) {
 		return
 	}
 	refs, _ := db.Collection("users").CountDocuments(ctx, bson.M{"referredBy": uid})
-	c.JSON(200, gin.H{"id": u.ID, "name": u.Name, "balance": u.Balance, "bonus": u.Bonus,
+	c.JSON(200, gin.H{"id": u.ID, "name": u.Name, "balance": u.Balance, "bonus": u.Bonus + u.Promo,
 		"referrals": refs, "refQualified": u.RefQualified, "inviteGoal": inviteGoal, "inviteReward": inviteReward, "bot": cfg.BotUsername, "minWithdraw": minWithdraw, "phone": u.Phone,
 		"gamesWon": u.GamesWon, "earned": u.Earned, "telebirr": cfg.TelebirrNumber, "telebirrName": cfg.TelebirrName,
 		"cashback": cashbackInfo(ctx, uid)})
@@ -543,7 +544,7 @@ func registerPhone(ctx context.Context, uid int64, raw string) string {
 	}
 	res, err := db.Collection("users").UpdateOne(ctx,
 		bson.M{"_id": uid, "phone": bson.M{"$exists": false}},
-		bson.M{"$set": bson.M{"phone": phone}, "$inc": bson.M{"bonus": signupBonus}})
+		bson.M{"$set": bson.M{"phone": phone}, "$inc": bson.M{"promo": signupBonus}})
 	if mongo.IsDuplicateKeyError(err) {
 		return "dup"
 	}
@@ -561,7 +562,9 @@ func registerPhone(ctx context.Context, uid int64, raw string) string {
 // refundSpot returns a cartela's price to the wallet it was paid from.
 func refundSpot(ctx context.Context, s Spot, n int, fee int64) {
 	field := "balance"
-	if s.Bonus {
+	if s.Promo {
+		field = "promo"
+	} else if s.Bonus {
 		field = "bonus"
 	}
 	if err := credit(ctx, s.UID, field, fee); err != nil {
@@ -572,11 +575,13 @@ func refundSpot(ctx context.Context, s Spot, n int, fee int64) {
 	cbInc(ctx, s.UID, "wagered", -fee) // a given-back stake was not played
 }
 
-func payWinner(ctx context.Context, uid, amt, round int64) error {
+// payWinner pays a round's prize. cash (won with deposit/prize money) goes to the withdrawable balance;
+// play (won with the signup promo) goes to the play wallet, so it can be played again but never withdrawn.
+func payWinner(ctx context.Context, uid, cash, play, round int64) error {
 	_, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid},
-		bson.M{"$inc": bson.M{"balance": amt, "earned": amt, "gamesWon": 1}})
+		bson.M{"$inc": bson.M{"balance": cash, "bonus": play, "earned": cash + play, "gamesWon": 1}})
 	if err == nil {
-		addTx(ctx, uid, "win", amt, strconv.FormatInt(round, 10))
+		addTx(ctx, uid, "win", cash+play, strconv.FormatInt(round, 10))
 	}
 	return err
 }

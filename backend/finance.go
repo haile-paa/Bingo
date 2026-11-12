@@ -446,7 +446,7 @@ func finSummary(c *gin.Context) {
 	pendDepSum, pendDepN := one("deposits", bson.M{"status": "pending"}, "amount")
 	pendWdSum, pendWdN := one("withdrawals", bson.M{"status": "pending"}, "amount")
 	var mainSum, playSum int64
-	if res := finAgg(ctx, "users", []bson.D{stage("$group", bson.M{"_id": nil, "main": bson.M{"$sum": "$balance"}, "play": bson.M{"$sum": "$bonus"}})}); len(res) > 0 {
+	if res := finAgg(ctx, "users", []bson.D{stage("$group", bson.M{"_id": nil, "main": bson.M{"$sum": "$balance"}, "play": bson.M{"$sum": bson.M{"$add": bson.A{bson.M{"$ifNull": bson.A{"$bonus", 0}}, bson.M{"$ifNull": bson.A{"$promo", 0}}}}}})}); len(res) > 0 {
 		mainSum, playSum = num(res[0]["main"]), num(res[0]["play"])
 	}
 	usersN, _ := db.Collection("users").CountDocuments(ctx, bson.M{})
@@ -543,7 +543,7 @@ func loadPeople(ctx context.Context, fresh bool) []pRow {
 	idx := make(map[int64]*pRow, len(us))
 	out := make([]pRow, len(us))
 	for i, u := range us {
-		out[i] = pRow{ID: u.ID, Name: u.Name, Phone: u.Phone, Balance: u.Balance, Bonus: u.Bonus, Earned: u.Earned,
+		out[i] = pRow{ID: u.ID, Name: u.Name, Phone: u.Phone, Balance: u.Balance, Bonus: u.Bonus + u.Promo, Earned: u.Earned,
 			GamesWon: u.GamesWon, RefQualified: u.RefQualified, Joined: u.CreatedAt.UnixMilli(), Blocked: u.Blocked, BlockReason: u.BlockReason}
 		idx[u.ID] = &out[i]
 	}

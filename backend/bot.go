@@ -353,7 +353,7 @@ func runAction(ctx context.Context, from tgUser, data string) {
 	case "play":
 		sendText(uid, "🎮 ለመጫወት ከታች ያለውን ይጫኑ፦", playKB())
 	case "bal":
-		sendMenu(uid, "💼 የአካውንት መረጃ\n\nስም፦ "+u.Name+"\nስልክ፦ "+u.Phone+"\nዋና ዋሌት፦ "+birr(u.Balance)+" ብር\nየጨዋታ ዋሌት፦ "+birr(u.Bonus)+" ብር")
+		sendMenu(uid, "💼 የአካውንት መረጃ\n\nስም፦ "+u.Name+"\nስልክ፦ "+u.Phone+"\nዋና ዋሌት፦ "+birr(u.Balance)+" ብር\nየጨዋታ ዋሌት፦ "+birr(u.Bonus+u.Promo)+" ብር")
 	case "dep":
 		setState(ctx, uid, "dep_amount")
 		sendText(uid, "💰 ማስገባት የሚፈልጉትን መጠን ከ"+birr(minDeposit)+" ብር ጀምሮ ያስገቡ።", nil)
