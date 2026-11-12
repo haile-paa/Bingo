@@ -159,7 +159,7 @@ func annRecipients(ctx context.Context, kind string) ([]int64, error) {
 		}
 		return nil, errors.New("Your owner phone number is not registered in the bot. Open the bot, press Register with that number, then try again.")
 	}
-	cur, err := db.Collection("users").Find(ctx, bson.M{"phone": bson.M{"$exists": true, "$ne": ""}},
+	cur, err := db.Collection("users").Find(ctx, bson.M{"phone": bson.M{"$exists": true, "$ne": ""}, "blocked": bson.M{"$ne": true}},
 		options.Find().SetProjection(bson.M{"_id": 1}))
 	if err != nil {
 		return nil, err

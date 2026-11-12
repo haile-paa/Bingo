@@ -108,7 +108,7 @@ const DICT = {
     language: "ቋንቋ",
     inviteTitle: "ጓደኞችን ይጋብዙ",
     inviteBody:
-      "ጓደኛዎ ሲመዘገብ 10 ብር ያገኛል። ጓደኛዎ ቢያንስ 10 ብር ሲያስገባ እርስዎ 10 ብር ያገኛሉ። ገቢ ያደረጉ 20 ጓደኞች ሲጋብዙ 150 ብር ያገኛሉ።",
+      "ገቢ ያደረጉ 20 ጓደኞች ሲጋብዙ 150 ብር ወደ የጨዋታ ዋሌትዎ ያገኛሉ።",
     copy: "ኮፒ",
     copied: "ተቀድቷል",
     shareBtn: "አጋራ",
@@ -226,7 +226,7 @@ const DICT = {
     language: "Language",
     inviteTitle: "Invite friends",
     inviteBody:
-      "Your friend gets 10 birr when they join. You get 10 birr when their first deposit of at least 10 birr is approved. Invite 20 friends who deposit and get 150 birr.",
+      "Invite 20 friends who make a deposit and get 150 birr in your play wallet.",
     copy: "Copy",
     copied: "Copied",
     shareBtn: "Share",

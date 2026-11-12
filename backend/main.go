@@ -164,6 +164,7 @@ func main() {
 	db = client.Database("bingo")
 	ensureIndexes(ctx)
 	loadBlocked(ctx)
+	dropSignupPromo(ctx)
 
 	startMaintenance()
 	startBots()

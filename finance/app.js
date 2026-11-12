@@ -39,7 +39,7 @@ const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const PAGES = [['overview', 'Overview'], ['revenue', 'Revenue'], ['people', 'People'], ['cash', 'Cash'], ['expenses', 'Expenses'], ['announce', 'Announce', 'Announcements'], ['bots', 'Bots', 'Bots (house players)'], ['maintenance', 'Maint.', 'Maintenance']]
 const KINDS = {
   entry: ['Bet', 'v'], win: ['Prize won', 'g'], deposit: ['Deposit', 'b'], withdraw: ['Withdraw request', 'a'],
-  refund: ['Refund', 'a'], signup_bonus: ['Signup bonus', 'v'], referral: ['Invite reward', 'v'], cashback: ['Cashback', 'v'],
+  refund: ['Refund', 'a'], signup_bonus: ['Signup bonus', 'v'], admin_adjust: ['Admin edit', 'a'], referral: ['Invite reward', 'v'], cashback: ['Cashback', 'v'],
 }
 const kindChip = (k) => `<span class="chip ${(KINDS[k] || ['', ''])[1]}">${esc((KINDS[k] || [k])[0])}</span>`
 
@@ -430,14 +430,39 @@ async function openPerson(id) {
       <div><small>Cartelas · wins</small><b class="num">${int(u.entries)} · ${int(u.gamesWon)}</b></div><div><small>Invited · paying</small><b class="num">${int(u.refs)} · ${int(u.refQualified)}</b></div>
     </div>
     <div class="actions" style="margin:14px 0">${u.blocked ? `<p class="note" style="flex:2;margin:0">🚫 Blocked${u.blockReason ? ': ' + esc(u.blockReason) : ''}</p>` : ''}<button class="btn ${u.blocked ? 'ghost' : 'danger'} small" id="blk">${u.blocked ? 'Unblock player' : '🚫 Block player'}</button></div>
+    <h4 class="sec">Edit player</h4>
+    <div class="actions" style="margin:0 0 14px;flex-wrap:wrap;gap:8px">
+      <label class="mut" style="flex:1 1 45%">Name<input class="in" id="ed-name" maxlength="60" value="${esc(u.name || '')}"></label>
+      <label class="mut" style="flex:1 1 45%">Phone<input class="in" id="ed-phone" inputmode="tel" value="${esc(u.phone || '')}"></label>
+      <label class="mut" style="flex:1 1 45%">Prize wallet (birr)<input class="in" id="ed-bal" inputmode="decimal" value="${(u.balance / 100).toFixed(2)}"></label>
+      <label class="mut" style="flex:1 1 45%">Play wallet (birr)<input class="in" id="ed-bonus" inputmode="decimal" value="${(u.bonus / 100).toFixed(2)}"></label>
+      <button class="btn small" id="ed-save" style="flex:1 1 100%">Save changes</button>
+    </div>
     <h4 class="sec">Deposits</h4>${payList(j.deposits, 'deposit')}
     <h4 class="sec">Withdrawals</h4>${payList(j.withdrawals, 'withdraw')}
     <h4 class="sec">Latest activity</h4><div class="list">${(j.txs || []).map((r) => `<div class="row"><div>${kindChip(r.kind)}<small>${when(r.at)}</small></div><span class="amt num ${sign(r.amount)}">${r.amount > 0 ? '+' : ''}${fmt(r.amount)}</span></div>`).join('') || '<p class="empty">No activity.</p>'}</div>`
     $('.x', dr).onclick = close
+    $('#ed-save', dr).onclick = async () => {
+      const body = {}
+      const bal = Math.round(parseFloat($('#ed-bal', dr).value) * 100), bonus = Math.round(parseFloat($('#ed-bonus', dr).value) * 100)
+      if (!Number.isFinite(bal) || !Number.isFinite(bonus) || bal < 0 || bonus < 0) return toast('Enter valid wallet amounts')
+      if (bal !== u.balance) body.balance = bal
+      if (bonus !== u.bonus) body.bonus = bonus
+      const name = $('#ed-name', dr).value.trim(), phone = $('#ed-phone', dr).value.trim()
+      if (name !== (u.name || '')) body.name = name
+      if (phone !== (u.phone || '')) body.phone = phone
+      if (!Object.keys(body).length) return toast('Nothing changed')
+      const lines = [body.balance !== undefined && `Prize wallet: ${fmt(u.balance)} -> ${fmt(bal)}`, body.bonus !== undefined && `Play wallet: ${fmt(u.bonus)} -> ${fmt(bonus)}`, body.name !== undefined && `Name: ${name}`, body.phone !== undefined && `Phone: ${phone}`].filter(Boolean)
+      if (!confirm(`Save these changes for ${u.name || 'this player'} (ID ${u.id})?\n\n${lines.join('\n')}`)) return
+      try {
+        await api(`/people/${u.id}/edit`, { method: 'POST', body })
+        toast('Player updated'); close(); loadPeople(); openPerson(u.id)
+      } catch (e) { if (e.message !== 'login') toast(e.message) }
+    }
     $('#blk', dr).onclick = async () => {
       let reason = ''
       if (!u.blocked) {
-        reason = prompt(`Block ${u.name || 'this player'} (ID ${u.id}) from the whole game?\n\nThey cannot play, deposit or withdraw. Their money stays in their wallet.\n\nReason (optional, only you can see it):`)
+        reason = prompt(`Block ${u.name || 'this player'} (ID ${u.id}) from the whole game?\n\nThey are removed from the bot and the game completely: no replies, no playing, and they cannot register again with the same phone. Their money stays in their wallet.\n\nReason (optional, only you can see it):`)
         if (reason === null) return
       } else if (!confirm('Unblock this player? They can play again at once.')) return
       try {

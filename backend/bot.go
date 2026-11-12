@@ -166,18 +166,8 @@ func handleUpdate(up Update) {
 	if from != 0 && !rl.allow("bot:"+strconv.FormatInt(from, 10), 25, time.Minute) {
 		return // flooding: ignore
 	}
-	if from != 0 && isBlocked(from) { // blocked players get nothing from the bot (no deposit, no withdrawal, no menu)
-		if up.Callback != nil {
-			tg("answerCallbackQuery", gin.H{"callback_query_id": up.Callback.ID})
-		}
-		if rl.allow("blockmsg:"+strconv.FormatInt(from, 10), 1, time.Minute) {
-			msg := msgBlocked
-			if cfg.SupportUser != "" {
-				msg += "\n@" + strings.TrimPrefix(cfg.SupportUser, "@")
-			}
-			notify(from, msg)
-		}
-		return
+	if from != 0 && isBlocked(from) { // blocked players get nothing from the bot (no reply, no deposit, no withdrawal, no menu)
+		return // silent: a blocked player gets no reply at all
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -215,8 +205,10 @@ func onContact(ctx context.Context, m *Message) {
 	}
 	switch registerPhone(ctx, uid, m.Contact.Phone) {
 	case "ok":
-		sendText(uid, "🎉 ✅ በተሳካ ሁኔታ ተመዝግበዋል!\n🎁 "+birr(signupBonus)+" ብር የጨዋታ ስጦታ ተጨምሯል።", gin.H{"remove_keyboard": true})
+		sendText(uid, "🎉 ✅ በተሳካ ሁኔታ ተመዝግበዋል!", gin.H{"remove_keyboard": true})
 		sendMenu(uid, msgChoose)
+	case "blocked":
+		// silent: the new account is removed too
 	case "dup":
 		sendText(uid, "ይህ ስልክ ቁጥር በሌላ አካውንት ተመዝግቧል።", gin.H{"remove_keyboard": true})
 	case "already":
@@ -245,7 +237,7 @@ func onStart(ctx context.Context, from tgUser, text string) {
 	}
 	setState(ctx, from.ID, "")
 	if u.Phone == "" {
-		sendText(from.ID, "👋 እንኳን ደህና መጡ, "+from.FirstName+"! ለመጀመር ይመዝገቡ፤ ሲመዘገቡ "+birr(signupBonus)+" ብር ስጦታ ያገኛሉ።", nil)
+		sendText(from.ID, "👋 እንኳን ደህና መጡ, "+from.FirstName+"! ለመጀመር ይመዝገቡ።", nil)
 		askContact(from.ID, u)
 		return
 	}
@@ -362,7 +354,7 @@ func runAction(ctx context.Context, from tgUser, data string) {
 		sendText(uid, "🤑 ማውጣት የሚፈልጉትን መጠን (ብር) ያስገቡ። ዝቅተኛው "+birr(minWithdraw)+" ብር ነው።\nየሚወጣ ሂሳብ፦ "+birr(u.Balance)+" ብር\nገንዘቡ ወደ "+u.Phone+" በቴሌብር ይላካል።", nil)
 	case "inv":
 		link := "https://t.me/" + cfg.BotUsername + "?start=ref_" + strconv.FormatInt(uid, 10)
-		sendMenu(uid, "🎁 ጓደኞችዎን ይጋብዙ፦\n"+link+"\n\nጓደኛዎ ሲመዘገብ "+birr(signupBonus)+" ብር ያገኛል። ቢያንስ "+birr(refMinDeposit)+" ብር የመጀመሪያ ገቢ ሲያደርግ እርስዎ "+birr(referralBonus)+" ብር ያገኛሉ።\n\n🎉 ገቢ ያደረጉ "+strconv.FormatInt(inviteGoal, 10)+" ጓደኞች ሲጋብዙ "+birr(inviteReward)+" ብር ያገኛሉ። (አሁን፦ "+strconv.FormatInt(u.RefQualified%inviteGoal, 10)+"/"+strconv.FormatInt(inviteGoal, 10)+")")
+		sendMenu(uid, "🎁 ጓደኞችዎን ይጋብዙ፦\n"+link+"\n\n🎉 ቢያንስ "+birr(refMinDeposit)+" ብር የመጀመሪያ ገቢ ያደረጉ "+strconv.FormatInt(inviteGoal, 10)+" ጓደኞች ሲጋብዙ "+birr(inviteReward)+" ብር ያገኛሉ። (አሁን፦ "+strconv.FormatInt(u.RefQualified%inviteGoal, 10)+"/"+strconv.FormatInt(inviteGoal, 10)+")")
 	case "sup":
 		if cfg.SupportUser == "" {
 			sendMenu(uid, "ድጋፍ በቅርቡ ይጨመራል።")

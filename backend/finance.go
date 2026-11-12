@@ -123,6 +123,7 @@ func registerFinance(r *gin.Engine) {
 	auth.GET("/people", finPeople)
 	auth.GET("/people/:id", finPerson)
 	auth.POST("/people/:id/block", finBlock)
+	auth.POST("/people/:id/edit", finEdit)
 	auth.GET("/ledger", finLedger)
 	auth.GET("/pending", finPending)
 	auth.GET("/expenses", finExpenses)

@@ -22,9 +22,7 @@ import (
 const (
 	minDeposit    int64 = 1000
 	minWithdraw   int64 = 10000
-	signupBonus   int64 = 1000
 	refMinDeposit int64 = 1000  // an invited friend counts only after a first deposit of at least 10 birr (stops fake-account farming)
-	referralBonus int64 = 1000  // per invited friend whose first deposit is approved (set 0 to turn off)
 	inviteGoal    int64 = 20    // every 20 such friends ...
 	inviteReward  int64 = 15000 // ... pay 150 birr into the play wallet
 	payoutPercent int64 = 80 // players share 80% of the stakes, the company keeps 20%
@@ -290,15 +288,7 @@ func payReferrer(ctx context.Context, uid, deposit int64) {
 	if err != nil {
 		return
 	}
-	if referralBonus > 0 {
-		if err := credit(ctx, u.ReferredBy, "bonus", referralBonus); err != nil {
-			log.Println("referral:", err)
-		} else {
-			addTx(ctx, u.ReferredBy, "referral", referralBonus, strconv.FormatInt(uid, 10))
-			go notify(u.ReferredBy, "🎁 የጋበዙት ጓደኛ የመጀመሪያ ገቢ አድርጓል። +"+birr(referralBonus)+" ብር ተጨምሯል!")
-		}
-	}
-	// goal: every inviteGoal friends -> inviteReward. $inc returns the new count atomically, so a goal can't pay twice.
+	// the only invite reward: every inviteGoal paying friends -> inviteReward. $inc returns the new count atomically, so a goal can't pay twice.
 	var ref User
 	if err := db.Collection("users").FindOneAndUpdate(ctx, bson.M{"_id": u.ReferredBy},
 		bson.M{"$inc": bson.M{"refQualified": 1}},
@@ -363,7 +353,7 @@ func meHandler(c *gin.Context) {
 
 func txsHandler(c *gin.Context) {
 	ctx := c.Request.Context()
-	cur, err := db.Collection("txs").Find(ctx, bson.M{"uid": c.GetInt64("uid")},
+	cur, err := db.Collection("txs").Find(ctx, bson.M{"uid": c.GetInt64("uid"), "kind": bson.M{"$ne": "admin_adjust"}}, // owner edits stay private
 		options.Find().SetSort(bson.D{{Key: "at", Value: -1}}).SetLimit(30))
 	if err != nil {
 		c.JSON(500, gin.H{"error": "server error"})
@@ -536,7 +526,7 @@ func maskPhone(p string) string {
 	return p[:2] + strings.Repeat("*", len(p)-6) + p[len(p)-4:]
 }
 
-// registerPhone links a phone to the account (one phone per account) and gives the welcome bonus.
+// registerPhone links a phone to the account (one phone per account). No signup bonus.
 func registerPhone(ctx context.Context, uid int64, raw string) string {
 	phone := normPhone(raw)
 	if phone == "" {
@@ -544,8 +534,16 @@ func registerPhone(ctx context.Context, uid int64, raw string) string {
 	}
 	res, err := db.Collection("users").UpdateOne(ctx,
 		bson.M{"_id": uid, "phone": bson.M{"$exists": false}},
-		bson.M{"$set": bson.M{"phone": phone}, "$inc": bson.M{"promo": signupBonus}})
+		bson.M{"$set": bson.M{"phone": phone}})
 	if mongo.IsDuplicateKeyError(err) {
+		// the phone belongs to another account; if that one is blocked, this new account is removed too
+		var owner User
+		if db.Collection("users").FindOne(ctx, bson.M{"phone": phone}).Decode(&owner) == nil && owner.Blocked {
+			if err := setBlocked(ctx, uid, true, "same phone as blocked player "+strconv.FormatInt(owner.ID, 10)); err != nil {
+				log.Println("block duplicate:", err)
+			}
+			return "blocked"
+		}
 		return "dup"
 	}
 	if err != nil {
@@ -555,7 +553,6 @@ func registerPhone(ctx context.Context, uid int64, raw string) string {
 	if res.ModifiedCount == 0 {
 		return "already"
 	}
-	addTx(ctx, uid, "signup_bonus", signupBonus, "")
 	return "ok"
 }
 
@@ -584,4 +581,32 @@ func payWinner(ctx context.Context, uid, cash, play, round int64) error {
 		addTx(ctx, uid, "win", cash+play, strconv.FormatInt(round, 10))
 	}
 	return err
+}
+// dropSignupPromo runs once: silently removes the unspent signup bonus (promo wallet) from every existing user.
+func dropSignupPromo(ctx context.Context) {
+	meta := db.Collection("meta")
+	if n, err := meta.CountDocuments(ctx, bson.M{"_id": "drop_signup_promo_v1"}); err != nil || n > 0 {
+		return
+	}
+	cur, err := db.Collection("users").Find(ctx, bson.M{"promo": bson.M{"$gt": 0}}, options.Find().SetProjection(bson.M{"_id": 1}))
+	if err != nil {
+		log.Println("drop promo:", err)
+		return
+	}
+	var us []User
+	if err := cur.All(ctx, &us); err != nil {
+		log.Println("drop promo:", err)
+		return
+	}
+	for _, u := range us {
+		// silent on purpose: no transaction row and no message, so players do not notice
+		if _, err := db.Collection("users").UpdateOne(ctx, bson.M{"_id": u.ID, "promo": bson.M{"$gt": 0}},
+			bson.M{"$set": bson.M{"promo": int64(0)}}); err != nil {
+			log.Println("drop promo:", err)
+		}
+	}
+	if _, err := meta.UpdateOne(ctx, bson.M{"_id": "drop_signup_promo_v1"}, bson.M{"$set": bson.M{"at": time.Now(), "users": len(us)}}, options.Update().SetUpsert(true)); err != nil {
+		log.Println("drop promo flag:", err)
+	}
+	log.Printf("signup promo removed from %d users", len(us))
 }
